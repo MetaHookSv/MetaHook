@@ -22,6 +22,7 @@ This file provides guidance and important rules working with code in this reposi
 - Symbol catalog and public API contracts: `GameData`
 - Engine-private symbol inventory: `privatevars/metahook-privatevars.md`
 - Build commands, conventions, and verification: `suggested_commands`, `CodeStyles`, `task_completion`
+- Build internals, dependency pinning, migration verification: `build_and_verification`
 
 #### When notes are insufficient: source entry points (query and read on demand)
 

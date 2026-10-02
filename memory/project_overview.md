@@ -29,7 +29,7 @@ MetaHook is the standalone Windows x86 launcher and public API for GoldSrc/SvEng
 - Fixed source submodules: Detours, Capstone, RapidJSON, Chocobo1Hash, Musa.Veil and MemoryModulePP.
 - MemoryModulePP's initial commit `d3c042a` is local only at migration time; publish it before expecting a remote recursive clone to work.
 - Python 3.8+ runs gamedata synchronization/validation. There is no renderer, OpenGL, physics or SDL build dependency for this launcher target.
-- Commands: [[metahook/suggested-commands]]. Current build evidence and limitations: root `README.md`.
+- Commands: [[metahook/suggested-commands]]. Build internals, dependency pinning and migration verification: [[metahook/build-and-verification]]. User-facing deployment: root `README.md`.
 
 ## Layout and entry points
 

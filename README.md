@@ -1,113 +1,80 @@
 # MetaHook
 
-Windows x86 MetaHook launcher, extracted from MetaHookSv commit
-`11a852774b1725d02735aeb348c32a7bf454507c`. Public headers and launcher
-behavior are preserved. Plugins and PluginLibs are not built by this project.
+MetaHook is a Windows launcher for GoldSrc engine games that hosts client-side
+plugins. It starts the game engine, loads the plugins listed in a mod's
+`plugins.lst`, and exposes a stable public API for those plugins to build
+against.
 
-## Build
+This repository is the standalone launcher plus its public headers. It was
+extracted from MetaHookSv and keeps the original launcher behavior and the
+plugin-facing ABI.
 
-Requirements: Visual Studio 2022 with Desktop development with C++, an x86
-MSVC toolchain and Windows SDK, CMake 3.21 or newer, Git, and Python 3.8 or newer.
-Put CMake, Git and Python on PATH. Internet access is needed for initial
-dependency preparation and the default gamedata synchronization.
+## What it does
+
+- Starts the engine (`hw.dll` or `sw.dll`) and drives its run loop.
+- Loads client-side plugins and manages their lifecycle.
+- Provides plugins with engine symbol resolution, hooking (inline, VFT, IAT and
+  inline-patch), memory and disassembly access, and DLL load notifications.
+- Serves engine symbol data from a validated gamedata catalog.
+
+## Supported targets
+
+- Windows x86.
+- GoldSrc engine variants tracked by the gamedata catalog: GoldSrc, GoldSrc
+  HL25, SvEngine and CoF.
+- Plugin interfaces are negotiated from V4 down to V1; the current public API
+  version is 115.
+
+## Installation
+
+At runtime MetaHook needs a 32-bit Windows system and a supported GoldSrc game
+installation.
+
+1. Build or obtain the launcher (see [Building](#building)).
+2. Put `MetaHook.exe` in the game's root directory, where the original game
+   executable lives.
+3. Copy `svencoop/metahook/gamedata` from the install tree to
+   `<game>/<mod>/metahook/gamedata`. The catalog must match the game and mod you
+   launch.
+
+Launching:
+
+- The launcher derives the mod from its own executable name, so rename it to
+  match the game (`hl.exe` selects `valve`, `svencoop.exe` selects `svencoop`),
+  or pass `-game <mod>` explicitly.
+- Plugins are loaded from `<mod>/metahook/configs/plugins.lst`, relative to the
+  game root.
+- Plugins are not part of this repository. Install them and their shared
+  dependencies under `<mod>/metahook/` separately.
+
+If the catalog has no entry matching the loaded module, the launcher stops with
+an error instead of guessing symbol addresses.
+
+## Building
+
+Requirements: Visual Studio 2022 with Desktop development with C++, an x86 MSVC
+toolchain and Windows SDK, CMake 3.21 or newer, Git, and Python 3.8 or newer,
+all on `PATH`. The first configuration needs network access to prepare
+dependencies and synchronize gamedata.
 
 ```bat
 scripts\build-MetaHook-x86-Debug.bat
 scripts\build-MetaHook-x86-Release.bat
 ```
 
-The scripts work from any current directory. An existing `SolutionDir` overrides
-the project root; otherwise the scripts locate it relative to their own path.
-They configure Visual Studio 2022 Win32 projects, build, and install. Any failed
-step returns a nonzero exit code. Build trees are `build/x86/Debug` and
-`build/x86/Release`; install trees are `install/x86/Debug` and
-`install/x86/Release`.
+Each script configures, builds and installs one configuration, and returns a
+nonzero exit code on failure. The install tree
+(`install/x86/<configuration>/`) contains `MetaHook.exe`, its PDB, and validated
+gamedata under `svencoop/metahook/gamedata`.
 
-Each install tree contains `MetaHook.exe`, `MetaHook.pdb`, and validated gamedata
-under `svencoop/metahook/gamedata`. Copy the gamedata directory to the applicable
-game's `<mod>/metahook/` directory when deploying. No game installation is
-modified automatically. This is the launcher distribution, not a complete
-plugin installation.
+Offline builds and direct CMake usage are documented in
+`memory/suggested_commands.md`; dependency pinning, build internals and the
+migration verification record are in `memory/build_and_verification.md`.
 
-Direct CMake configuration performs the same dependency preparation:
+## License
 
-```bat
-cmake -S . -B build/x86/Debug -G "Visual Studio 17 2022" -A Win32 -DCMAKE_INSTALL_PREFIX="%CD%/install/x86/Debug"
-cmake --build build/x86/Debug --config Debug --target install --parallel
-```
+MetaHook is available under the MIT License; see `LICENSE`. Bundled third-party
+sources keep their own license files.
 
-Debug uses `/MTd`; Release uses `/MT`. Both use VC-LTL's existing msvcrt mode.
-The targets retain their original Windows subsystem, image base, DPI behavior
-and configuration-specific optimization/link settings. Only x86 Debug and
-Release are supported.
-
-## Dependencies
-
-Detours, Capstone, RapidJSON, Chocobo1Hash and Musa.Veil retain their MetaHookSv
-submodule URLs and exact commits. CMake initializes missing submodules without
-tracking remote branches or overwriting an existing working checkout.
-
-MemoryModulePP is a local component repository at `thirdparty/MemoryModulePP`,
-with origin `https://github.com/MetaHookSv/MemoryModulePP`. Its source is copied
-unchanged from the baseline, with a new CMake static-library target. The initial
-component commit is local only: **recursive cloning from GitHub cannot obtain
-it until that commit is published**. Keep the local component repository when
-using this unpublished workspace. No fallback to an unrelated upstream version
-is performed.
-
-VC-LTL is not a submodule. CMake downloads `VC-LTL-Binary.7z` from the official
-Chuyu-Team/VC-LTL5 `v5.3.1` release, verifies SHA-256
-`7a18799ed3aa84a225610a5447a56bc534c5c98ccb8dec05caba0e3f633431ad`,
-and uses the package's CMake helper. Downloads and extracted files live in
-`thirdparty/cache`, which is ignored by Git. The shared cache is locked during
-preparation. A validated extracted package is reused on later configurations.
-`METAHOOK_DEPENDENCY_CACHE_DIR` selects another cache on first configuration;
-`VC_LTL_Root` selects its extracted package directory.
-
-## Gamedata
-
-`METAHOOK_SYNC_GAMEDATA` defaults to `ON`. Every build checks the existing
-GoldSrc_VibeSignatures index using the original synchronization/validation
-logic; unchanged snapshots are reused. Download or validation failures fail
-the build instead of silently using stale data.
-
-For offline compilation after dependencies have been prepared:
-
-```bat
-cmake -S . -B build/x86/Debug -DMETAHOOK_SYNC_GAMEDATA=OFF
-cmake --build build/x86/Debug --config Debug --target install
-```
-
-This installs any existing gamedata without downloading it. Re-enable with
-`-DMETAHOOK_SYNC_GAMEDATA=ON`. `METAHOOK_GAMEDATA_DIR` may point to an existing
-dataset; its path must end in `metahook/gamedata` as required by the updater.
-
-Build success does not validate game startup, plugin loading or gameplay.
-Third-party sources retain their license files; MetaHook's license is in
-`LICENSE`.
-
-## Migration verification
-
-Verified locally with CMake 3.31.12, Visual Studio 2022 / MSVC 19.44.35228,
-and Windows SDK 10.0.26100.0:
-
-- Debug and Release entrypoints build and install successfully, including
-  incremental calls from outside the project directory.
-- A fresh CMake cache downloads and verifies VC-LTL; a fresh offline-mode build
-  installs the executable and PDB without gamedata.
-- Both normal installs contain 21 snapshots that pass the updater's offline
-  validation. A deliberately invalid gamedata URL fails the build even when
-  previous snapshots exist.
-- Invalid dependency archives and CMake configuration errors propagate through
-  both batch entrypoints as nonzero exit codes without invoking the build.
-- Both executables are x86 Windows GUI images at base `0x1400000`, with the
-  original icon/version resources, per-monitor DPI manifest, and msvcrt imports.
-- Generated launcher, Capstone and MemoryModule projects use the expected CRT
-  settings and VC-LTL paths; none depend on the old checkout. All 615 migrated
-  files match their source bytes, and the source repository remains clean.
-
-Local evidence is under the ignored `build/verification/` directory. Capstone
-emits existing CMake policy deprecation warnings; a clean Debug link reports
-LNK4075 from VC-LTL's `libvcruntimed.lib` because incremental linking is disabled,
-as in the original launcher project. These did not prevent either build.
-Game startup/plugin compatibility and remote recursive cloning remain untested.
+Plugins, PluginLibs and installer/tools are maintained in the upstream
+MetaHookSv project, not in this repository.

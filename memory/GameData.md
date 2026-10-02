@@ -95,4 +95,4 @@ API 115 把旧的 `cbSize < sizeof(mh_gamesymbol_t)` 拒绝规则改成版本化
 
 完整校验器保留源仓库的消费者门禁：按 `(module, name)` 建键，允许同名跨模块，不允许同一模块名字的冲突记录。运行时则按 `(moduleCRC64, name)` 建键；共享 DLL 可使不同游戏使用同一 catalog 身份。上游有记录不等于每个消费者都需要它：新增必需门禁前先确认真实读取/调用点、可达游戏集合及模块身份。
 
-迁移时已有的同步校验、构建证据见根 README；原笔记的 pytest、插件构建和发布验证是**源仓库历史结果**，不是本仓库已执行结果。`scripts/tests` 未迁入；本体运行、旧 cbSize 调用方和插件加载尚未在游戏内复核。命令见 [[metahook/suggested-commands]]。
+迁移时已有的同步校验、构建证据见 [[metahook/build-and-verification]]；原笔记的 pytest、插件构建和发布验证是**源仓库历史结果**，不是本仓库已执行结果。`scripts/tests` 未迁入；本体运行、旧 cbSize 调用方和插件加载尚未在游戏内复核。命令见 [[metahook/suggested-commands]]。
