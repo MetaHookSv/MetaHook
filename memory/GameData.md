@@ -14,7 +14,7 @@ tags:
 
 ## 概览与迁移范围
 
-GameData 是 launcher 与插件共享的本地符号 catalog，从 `<game>/<mod>/metahook/gamedata/index.json` 读取并冻结只读符号表，按 `(moduleCRC64, symbolName)` 查询。模块 CRC-64/XZ 从原始二进制文件懒计算，不由游戏名或当前内存镜像代替。
+GameData 是 launcher 与插件共享的本地符号 catalog，从 `<game>/<mod>/metahook/gamedata/index.json` 以及所有嵌套的 `gamedata/**/index.json` 读取并冻结只读符号表，按 `(moduleCRC64, symbolName)` 查询。根 index.json 必须存在且合法；嵌套 index.json 为尽力合并，单个失败只记入 diagnostics，不使整份 catalog 失败。模块 CRC-64/XZ 从原始二进制文件懒计算，不由游戏名或当前内存镜像代替。
 
 本笔记从 MetaHookSv 的 [GameData 原笔记](https://github.com/hzqst/MetaHookSv/blob/11a852774b1725d02735aeb348c32a7bf454507c/memory/GameData.md) 提取本体架构、API 契约与通用经验；逐插件迁移日志、旧 MSBuild 验证记录保留在原笔记。这里描述移植基线 API 115 的最终状态，不沿用原笔记中已被后续条目取代的 API 112、vtable unsupported 或严格 `cbSize` 规则。
 
@@ -40,9 +40,9 @@ GameData 是 launcher 与插件共享的本地符号 catalog，从 `<game>/<mod>
 
 ## Catalog 数据流与生命周期
 
-1. `GameData::Initialize` 校验 index schema 4 与 snapshot dataset schema 5、source snapshot contract 8、analysis contract 3。
-2. 验证路径安全、大小和 SHA-256，只提取 Windows records。单个 snapshot 失败记入 diagnostics，不破坏其余 catalog。
-3. 将记录规范化为 `GameSymbolRecord`，按 CRC64 和大小写敏感的 symbolName 建表；完全一致的重复记录去重，内容不同返回 `CATALOG_CONFLICT`。
+1. `GameData::Initialize(const char* const* gamedataRoots, size_t gamedataRootCount)` 接收一组 gamedata 根目录：`gamedataRoots[0]` 为主根，其 index.json 缺失/非法直接返回 false；其余根按尽力合并。metahook.cpp 的 `MH_LoadEngine_CollectGamedataRoot` 负责递归发现 `gamedata/**/index.json`（主根恒为首项，子目录按名排序、深度优先，跳过 reparse point）。
+2. 每个根读取自己的 `<root>/index.json` 并校验 index schema 4；随后按该根目录解析 snapshot url，校验路径安全、大小和 SHA-256，只提取 Windows records。snapshot 校验 snapshot dataset schema 5、source snapshot contract 8、analysis contract 3。单个 snapshot 失败记入 diagnostics，不破坏其余 catalog。
+3. 将记录规范化为 `GameSymbolRecord`，按 CRC64 和大小写敏感的 symbolName 建表；完全一致的重复记录去重，内容不同返回 `CATALOG_CONFLICT`。多个 index 声明同一 gameVersion 时保留首个；url/sha256 不同的重复声明记为冲突诊断并忽略后者。
 4. catalog 冻结后不重载；返回的签名文本、bytes、mask、legacyPattern 指针有效至进程退出。
 5. 按 `moduleBase` 管理 PE/blob/None 来源。`RegisterModuleFileSource` 注册 blob 原始文件，`RegisterMirrorAlias` 关联镜像与真实模块。
 

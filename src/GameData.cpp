@@ -81,11 +81,23 @@ namespace
 		std::unordered_map<std::string, std::unique_ptr<GameSymbolRecord>> symbols;
 	};
 
+	// One snapshot entry declared by an index.json. Tracked so that a
+	// gameVersion declared by more than one index (the primary catalog plus
+	// nested catalogs) can be detected: the first declaration wins, an
+	// identical re-declaration is dropped silently, a differing one is reported
+	// as a conflict.
+	struct SnapshotDeclaration
+	{
+		std::string root;
+		std::string url;
+		std::string sha256;
+	};
+
 	struct GameDataCatalog
 	{
-		std::string gamedataRoot;
 		bool available = false;
 		std::unordered_map<uint64_t, std::unique_ptr<ModuleCatalog>> modules;
+		std::unordered_map<std::string, SnapshotDeclaration> snapshotDeclarations;
 		std::vector<std::string> diagnostics;
 	};
 
@@ -686,7 +698,8 @@ namespace
 		mc.symbols[symbolName] = std::make_unique<GameSymbolRecord>(std::move(rec));
 	}
 
-	void LoadSnapshot(const std::string& root, const rapidjson::Value& version)
+	// Load one snapshot relative to the index directory that declared it.
+	void LoadSnapshot(const std::string& indexDir, const rapidjson::Value& version)
 	{
 		const rapidjson::Value* gameVersionValue = FindMember(version, "gameVersion");
 		const rapidjson::Value* urlValue = FindMember(version, "url");
@@ -712,7 +725,7 @@ namespace
 			return;
 		}
 
-		std::string path = JoinPath(root, url);
+		std::string path = JoinPath(indexDir, url);
 
 		std::vector<char> data;
 		if (!ReadFileBytes(path, data))
@@ -1292,22 +1305,16 @@ namespace
 		out = static_cast<uint64_t>(crc);
 		return MH_GAMESYMBOL_OK;
 	}
-}
 
-namespace GameData
-{
-	bool Initialize(const char* gamedataRoot)
+	// Parse and load one <indexDir>\index.json. Returns true when the index is
+	// present and structurally valid; its snapshots are then merged into the
+	// shared catalog (per-snapshot failures are isolated as diagnostics). A
+	// gameVersion already declared by an earlier index is deduplicated: an
+	// identical declaration is dropped silently, a differing one is reported as
+	// a conflict and the first declaration is kept.
+	bool LoadIndexDir(const std::string& indexDir)
 	{
-		g_catalog = GameDataCatalog{};
-		g_catalog.gamedataRoot = gamedataRoot ? gamedataRoot : "";
-
-		if (g_catalog.gamedataRoot.empty())
-		{
-			AddDiagnostic("gamedata root is empty");
-			return false;
-		}
-
-		std::string indexPath = JoinPath(g_catalog.gamedataRoot, "index.json");
+		std::string indexPath = JoinPath(indexDir, "index.json");
 
 		std::vector<char> data;
 		if (!ReadFileBytes(indexPath, data))
@@ -1319,13 +1326,14 @@ namespace GameData
 		rapidjson::Document index;
 		if (index.Parse(data.data(), data.size()).HasParseError())
 		{
-			AddDiagnostic("index.json parse error at offset %zu", index.GetErrorOffset());
+			AddDiagnostic("index.json parse error at offset %zu: %s",
+				index.GetErrorOffset(), indexPath.c_str());
 			return false;
 		}
 
 		if (!index.IsObject())
 		{
-			AddDiagnostic("index.json root is not an object");
+			AddDiagnostic("index.json root is not an object: %s", indexPath.c_str());
 			return false;
 		}
 
@@ -1335,11 +1343,71 @@ namespace GameData
 		const rapidjson::Value* versions = FindMember(index, "versions");
 		if (!versions || !versions->IsArray())
 		{
-			AddDiagnostic("index.json: 'versions' must be an array");
+			AddDiagnostic("index.json: 'versions' must be an array: %s", indexPath.c_str());
 			return false;
 		}
+
 		for (const auto& v : versions->GetArray())
-			LoadSnapshot(g_catalog.gamedataRoot, v);
+		{
+			const rapidjson::Value* gameVersionValue = FindMember(v, "gameVersion");
+			const rapidjson::Value* urlValue = FindMember(v, "url");
+			const rapidjson::Value* sha256Value = FindMember(v, "sha256");
+			if (!gameVersionValue || !gameVersionValue->IsString() ||
+				!urlValue || !urlValue->IsString() ||
+				!sha256Value || !sha256Value->IsString())
+			{
+				AddDiagnostic("index.json: a versions entry is missing gameVersion/url/sha256: %s", indexPath.c_str());
+				continue;
+			}
+
+			std::string gameVersion = gameVersionValue->GetString();
+			std::string url = urlValue->GetString();
+			std::string sha256 = sha256Value->GetString();
+
+			auto it = g_catalog.snapshotDeclarations.find(gameVersion);
+			if (it != g_catalog.snapshotDeclarations.end())
+			{
+				const SnapshotDeclaration& first = it->second;
+				if (first.url != url || first.sha256 != sha256)
+				{
+					AddDiagnostic("gameVersion '%s' is declared by both '%s' and '%s' with differing url/sha256; keeping the first",
+						gameVersion.c_str(), first.root.c_str(), indexDir.c_str());
+				}
+				continue;
+			}
+
+			g_catalog.snapshotDeclarations.emplace(gameVersion, SnapshotDeclaration{ indexDir, url, sha256 });
+			LoadSnapshot(indexDir, v);
+		}
+
+		return true;
+	}
+}
+
+namespace GameData
+{
+	bool Initialize(const char* const* gamedataRoots, size_t gamedataRootCount)
+	{
+		g_catalog = GameDataCatalog{};
+
+		if (!gamedataRoots || gamedataRootCount == 0 || !gamedataRoots[0] || !gamedataRoots[0][0])
+		{
+			AddDiagnostic("gamedata root is empty");
+			return false;
+		}
+
+		// The primary index at the root must be present and valid; it defines the
+		// catalog. Additional indexes (usually discovered in nested sub-directories)
+		// are merged on a best-effort basis: a missing or malformed nested index is
+		// isolated as a diagnostic and does not fail the catalog.
+		if (!LoadIndexDir(gamedataRoots[0]))
+			return false;
+
+		for (size_t i = 1; i < gamedataRootCount; ++i)
+		{
+			if (gamedataRoots[i] && gamedataRoots[i][0])
+				LoadIndexDir(gamedataRoots[i]);
+		}
 
 		g_catalog.available = true;
 		return true;
