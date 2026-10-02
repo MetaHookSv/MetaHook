@@ -1,5 +1,8 @@
 /build/
 /install/
+/Release/
+/Debug/
+/x64/
 /thirdparty/cache/
 /.vs/
 *.user
