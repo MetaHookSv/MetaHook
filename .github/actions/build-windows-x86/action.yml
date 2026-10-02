@@ -1,5 +1,5 @@
 name: Build Windows x86 Release
-description: Build, validate and package the MetaHook install tree.
+description: Build, validate and package the MetaHook runtime and gamedata.
 
 outputs:
   archive-path:
@@ -20,7 +20,7 @@ runs:
       shell: cmd
       run: python scripts\validate-gamedata.py install\x86\Release\svencoop\metahook\gamedata --manifest scripts\manifests\metahook.json
 
-    - name: Package install tree
+    - name: Package runtime and gamedata
       id: package
       shell: pwsh
       working-directory: install/x86/Release
@@ -28,7 +28,10 @@ runs:
         $archiveDirectory = Join-Path $env:GITHUB_WORKSPACE 'build/artifacts'
         New-Item -ItemType Directory -Path $archiveDirectory -Force | Out-Null
         $archivePath = Join-Path $archiveDirectory 'MetaHook-windows-x86.7z'
-        & 7z a -t7z $archivePath '*' -r
+        if (Test-Path -LiteralPath $archivePath -PathType Leaf) {
+          Remove-Item -LiteralPath $archivePath
+        }
+        & 7z a -t7z $archivePath 'MetaHook.exe' 'MetaHook.pdb' 'SDL2.dll' 'SDL3.dll' 'svencoop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         & 7z t $archivePath
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

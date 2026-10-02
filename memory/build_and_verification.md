@@ -120,11 +120,20 @@ disabled, as in the original launcher project. Neither prevented a build.
 - Verification: executed the actual package step against a fresh install tree with official 7-Zip 26.03. Creation, integrity testing and extraction exited 0; all 208 extracted file paths and SHA-256 hashes matched the install tree. The archive was 2,406,066 bytes. Both workflows passed actionlint, and `git diff --check` reported no whitespace errors. Logs: `build/verification/ci-7z-package.log` and `ci-7z-extract.log`.
 - Scope: packaging only; no launcher, SDL or gamedata behavior changed. The earlier ZIP verification above records the original workflow implementation.
 
+## Direct 7z artifact downloads (2026-10-02)
+
+- Trigger: the live artifact downloaded as a timestamped ZIP containing `MetaHook-windows-x86.7z`.
+- Root cause: `actions/upload-artifact@v7` defaults `archive` to `true`. `compression-level: 0` disables ZIP compression but retains ZIP packaging.
+- Implementation: LiveBuild sets `archive: false` for its single archive path. This mode uses the uploaded file's name as the artifact name, so the timestamped `name` and ZIP compression input were removed. Tag releases already upload the 7z file directly.
+- Hosted verification before this fix: LiveBuild run `37023757187` at `be8a34b` completed successfully, including recursive dependency checkout, Release build, gamedata validation, 7z creation/testing and the ZIP-wrapped upload.
+- Package scope: the user also restricted the archive to `MetaHook.exe`, `MetaHook.pdb`, `SDL2.dll`, `SDL3.dll` and the complete `svencoop/` subtree. The action selects those explicit inputs and removes a previous generated archive at its fixed `build/artifacts` path before creation, because `7z a` otherwise retains old entries when updating an archive.
+- Local verification: executed the actual package step with official 7-Zip 26.03 after seeding the previous 208-file archive. Creation, integrity testing and extraction exited 0; exactly 16 requested files remained and all SHA-256 hashes matched. Both workflows passed actionlint and the diff whitespace check. Logs: `build/verification/ci-runtime-package.log` and `ci-runtime-extract.log`.
+- Scope: Actions artifact transport and packaged file selection. Previous artifacts retain their original format and contents.
+
 ## Runtime and verification limitations
 
 - Build success does not validate game startup, plugin loading or gameplay.
-- Game startup/plugin compatibility and remote recursive cloning remain untested
-  in this standalone checkout.
+- Game startup/plugin compatibility remains untested in this standalone checkout.
 - The inherited `scripts/tests` suite was not migrated; do not report its
   results as current standalone results.
 
