@@ -27,11 +27,21 @@ entry point live in the root `README.md`; runnable commands are in
   package. Downloads and extraction are cached under `thirdparty/cache`
   (Git-ignored), guarded by a lock during preparation, and a validated package
   is reused on later configurations.
-- Gamedata: `METAHOOK_SYNC_GAMEDATA` (default `ON`) checks the existing
-  GoldSrc_VibeSignatures index on every build and reuses unchanged snapshots;
-  download or validation failures fail the build instead of using stale data.
-  `OFF` installs existing data without downloading. `METAHOOK_GAMEDATA_DIR`
-  points at an existing dataset and its path must end in `metahook/gamedata`.
+- Gamedata: `METAHOOK_SYNC_GAMEDATA` (default `ON`) runs
+  `scripts/sync-gamedata.py` with the launcher manifest
+  `scripts/manifests/metahook.json`. The synchronizer prunes each declared game
+  version to the symbols the launcher resolves and publishes `index.json` plus
+  one stable `<gameVersion>.json` per version (no more content-addressed names).
+  Raw upstream snapshots and the last index are kept in the persistent cache
+  `${CMAKE_BINARY_DIR}/gamedata-sync/raw`; later builds reuse them, and an
+  unreachable index falls back to the cached index so the build can proceed
+  offline. The cache is never cleaned between builds; only ephemeral staging
+  directories are removed after publish. `OFF` installs existing data without
+  downloading. `METAHOOK_GAMEDATA_DIR` points at an existing dataset and its
+  path must end in `metahook/gamedata`. The release gate is
+  `scripts/validate-gamedata.py <dir> --manifest scripts/manifests/metahook.json`
+  (`--full-catalog` adds the external-plugin consumer gates, which require the
+  complete upstream catalog and must not run on a pruned output).
 
 ## Dependency pinning
 

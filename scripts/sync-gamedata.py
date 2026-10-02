@@ -43,6 +43,74 @@ GAME_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9_]+-[0-9]+[A-Za-z]*$")
 LOWERCASE_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 SHA256_PATTERN = re.compile(r"^[0-9A-Fa-f]{64}$")
 
+MANIFEST_SCHEMA_VERSION = 1
+
+# Record kinds this consumer understands, mirroring GameData.cpp's Normalize*
+# dispatch. A manifest may only reference these.
+KIND_LITERALS = frozenset(
+    {
+        "function",
+        "global",
+        "patch",
+        "scalar",
+        "structMember",
+        "virtualFunction",
+        "vtable",
+    }
+)
+
+# Directories inside the cache root. The cache is persistent (never cleaned
+# between builds); only ephemeral staging directories are removed after publish.
+CACHE_RAW_DIRECTORY = "raw"
+CACHE_RAW_SNAPSHOT_DIRECTORY = "snapshots"
+CACHE_RAW_INDEX_FILE_NAME = "index.json"
+
+# Payload keys GameData.cpp actually reads, per record kind. Everything else in
+# a payload is dropped during pruning; a manifest may drop any of these too via
+# stripPayloadFields.
+CONSUMED_PAYLOAD_FIELDS: Dict[str, Tuple[str, ...]] = {
+    "function": (
+        "func_rva",
+        "func_size",
+        "func_sig",
+        "func_sig_allow_across_function_boundary",
+    ),
+    "global": (
+        "gv_rva",
+        "gv_sig",
+        "gv_sig_va",
+        "gv_va",
+        "gv_inst_offset",
+        "gv_inst_disp",
+        "gv_inst_length",
+        "gv_sig_allow_across_function_boundary",
+    ),
+    "patch": ("patch_rva",),
+    "scalar": ("scalar_name", "scalar_value"),
+    "structMember": ("struct_name", "member_name", "offset"),
+    "virtualFunction": (
+        "vfunc_index",
+        "vtable_name",
+        "func_rva",
+        "func_size",
+        "vfunc_sig",
+        "func_sig",
+        "vfunc_sig_allow_across_function_boundary",
+        "func_sig_allow_across_function_boundary",
+    ),
+    "vtable": ("vtable_rva", "vtable_size", "vtable_symbol", "vtable_numvfunc"),
+}
+
+# Snapshot top-level members GameData.cpp reads. A manifest may drop any of
+# these too (stripTopLevelFields is applied on top).
+CONSUMED_TOP_LEVEL_FIELDS = ("schemaVersion", "source", "binaries", "records")
+
+# `source` sub-fields GameData.cpp reads.
+CONSUMED_SOURCE_FIELDS = ("snapshotSchemaVersion", "analysisOutputContractVersion")
+
+# Per-record members GameData.cpp reads.
+CONSUMED_RECORD_FIELDS = ("platform", "module", "symbolName", "kind", "payload")
+
 
 class UpdateError(Exception):
     pass
@@ -73,6 +141,29 @@ class GameDataIndex:
     entries: List[SnapshotEntry]
 
 
+@dataclass(frozen=True)
+class ConsumerManifest:
+    """A consumer's declaration of which symbols it needs and which fields it
+    reads. Shared by the launcher and by external plugins so the same
+    synchronization and pruning pipeline can serve every consumer."""
+
+    name: str
+    index_url: Optional[str]
+    game_versions: Tuple[str, ...]
+    symbols: Dict[str, str]  # symbolName -> expected kind
+    optional_symbols: Dict[str, str]  # symbolName -> expected kind (present-only)
+    numbered_patch_sets: Tuple[str, ...]
+    strip_payload_fields: Dict[str, Tuple[str, ...]]  # kind -> fields to drop
+    strip_record_fields: Tuple[str, ...]
+    strip_top_level_fields: Tuple[str, ...]
+    # symbolName -> gameVersions where it is deliberately absent and therefore
+    # not required (e.g. NLoadBlob/FreeBlob on SvEngine). Still kept when present.
+    symbol_exemptions: Dict[str, Tuple[str, ...]]
+    # Groups where at least one member must be present (e.g. native cvar_hooks
+    # OR the numbered Cvar_Set_to_Cvar_DirectSet_callsite_N patch set).
+    alternative_groups: Tuple[Tuple[str, ...], ...]
+
+
 def log(message: str) -> None:
     print("[MetaHook gamedata] {}".format(message), flush=True)
 
@@ -98,15 +189,21 @@ def parse_arguments() -> argparse.Namespace:
         help="Destination metahook/gamedata directory.",
     )
     parser.add_argument(
+        "--manifest",
+        required=True,
+        help="Consumer manifest (JSON) selecting the symbols to keep and the "
+        "payload fields to strip.",
+    )
+    parser.add_argument(
         "--temp-root",
-        help="Same-volume directory used for verified staging data.",
+        help="Same-volume persistent cache directory: verified raw snapshots are "
+        "reused across builds, and the last index is used to build offline.",
     )
     parser.add_argument(
         "--index-url",
         help=(
-            "HTTPS index URL. Defaults to {} or the built-in catalog URL.".format(
-                INDEX_URL_ENVIRONMENT_VARIABLE
-            )
+            "HTTPS index URL. Defaults to the manifest's indexUrl, then {} or "
+            "the built-in catalog URL.".format(INDEX_URL_ENVIRONMENT_VARIABLE)
         ),
     )
     parser.add_argument(
@@ -117,10 +214,186 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def normalize_index_url(argument_value: Optional[str]) -> str:
+def load_manifest(path: Path) -> ConsumerManifest:
+    try:
+        raw = Path(os.path.abspath(str(path))).read_bytes()
+    except OSError as error:
+        raise UpdateError("manifest is missing or unreadable: {} ({})".format(path, error)) from error
+
+    document = parse_json_document(raw, "manifest")
+    if not isinstance(document, dict):
+        raise UpdateError("manifest root is not an object")
+
+    schema_version = document.get("schemaVersion")
+    if schema_version != MANIFEST_SCHEMA_VERSION:
+        raise UpdateError(
+            "manifest schemaVersion must be {}".format(MANIFEST_SCHEMA_VERSION)
+        )
+
+    name = document.get("name")
+    if not isinstance(name, str) or not name:
+        raise UpdateError("manifest name is missing or invalid")
+
+    index_url = document.get("indexUrl")
+    if index_url is not None:
+        if not isinstance(index_url, str) or not index_url:
+            raise UpdateError("manifest indexUrl must be a non-empty string when present")
+
+    game_versions = document.get("gameVersions")
+    if not isinstance(game_versions, list) or not game_versions:
+        raise UpdateError("manifest gameVersions must be a non-empty array")
+    seen_versions: Set[str] = set()
+    for value in game_versions:
+        if not isinstance(value, str) or not GAME_VERSION_PATTERN.fullmatch(value):
+            raise UpdateError("manifest contains an invalid gameVersion: {!r}".format(value))
+        if value in seen_versions:
+            raise UpdateError("manifest contains duplicate gameVersion: {}".format(value))
+        seen_versions.add(value)
+
+    def parse_kind_map(value: object, field: str) -> Dict[str, str]:
+        if not isinstance(value, dict):
+            raise UpdateError("manifest {} must be an object".format(field))
+        result: Dict[str, str] = {}
+        for symbol, kind in value.items():
+            if not isinstance(symbol, str) or not symbol:
+                raise UpdateError("manifest {} contains an invalid symbol name".format(field))
+            if kind not in KIND_LITERALS:
+                raise UpdateError(
+                    "manifest {} entry '{}' has an unsupported kind: {!r}".format(
+                        field, symbol, kind
+                    )
+                )
+            result[symbol] = kind
+        return result
+
+    symbols = parse_kind_map(document.get("symbols"), "symbols")
+    if not symbols:
+        raise UpdateError("manifest symbols must not be empty")
+
+    optional_value = document.get("optionalSymbols", {})
+    if isinstance(optional_value, list):
+        # Accept a bare list of names for present-only symbols of any kind.
+        optional_symbols = {}
+        for symbol in optional_value:
+            if not isinstance(symbol, str) or not symbol:
+                raise UpdateError("manifest optionalSymbols contains an invalid symbol name")
+            optional_symbols[symbol] = None  # type: ignore[assignment]
+    else:
+        optional_symbols = parse_kind_map(optional_value, "optionalSymbols")
+        optional_symbols = dict(optional_symbols)
+
+    raw_patch_sets = document.get("numberedPatchSets", [])
+    if not isinstance(raw_patch_sets, list):
+        raise UpdateError("manifest numberedPatchSets must be an array")
+    patch_sets: List[str] = []
+    for prefix in raw_patch_sets:
+        if not isinstance(prefix, str) or not prefix:
+            raise UpdateError("manifest numberedPatchSets contains an invalid prefix")
+        patch_sets.append(prefix)
+
+    raw_strip_payload = document.get("stripPayloadFields", {})
+    if not isinstance(raw_strip_payload, dict):
+        raise UpdateError("manifest stripPayloadFields must be an object")
+    strip_payload: Dict[str, Tuple[str, ...]] = {}
+    for kind, fields in raw_strip_payload.items():
+        if kind not in KIND_LITERALS:
+            raise UpdateError(
+                "manifest stripPayloadFields references an unsupported kind: {!r}".format(kind)
+            )
+        if not isinstance(fields, list) or not all(isinstance(f, str) and f for f in fields):
+            raise UpdateError(
+                "manifest stripPayloadFields['{}'] must be an array of field names".format(kind)
+            )
+        strip_payload[kind] = tuple(dict.fromkeys(fields))
+
+    def require_string_list(value: object, field: str) -> Tuple[str, ...]:
+        if value is None:
+            return ()
+        if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
+            raise UpdateError("manifest {} must be an array of field names".format(field))
+        return tuple(dict.fromkeys(value))
+
+    raw_exemptions = document.get("symbolExemptions", {})
+    if not isinstance(raw_exemptions, dict):
+        raise UpdateError("manifest symbolExemptions must be an object")
+    symbol_exemptions: Dict[str, Tuple[str, ...]] = {}
+    for symbol, versions in raw_exemptions.items():
+        if not isinstance(symbol, str) or not symbol:
+            raise UpdateError("manifest symbolExemptions contains an invalid symbol name")
+        if not isinstance(versions, list) or not all(
+            isinstance(v, str) and GAME_VERSION_PATTERN.fullmatch(v) for v in versions
+        ):
+            raise UpdateError(
+                "manifest symbolExemptions['{}'] must be an array of gameVersions".format(symbol)
+            )
+        symbol_exemptions[symbol] = tuple(versions)
+
+    raw_groups = document.get("alternativeGroups", [])
+    if not isinstance(raw_groups, list):
+        raise UpdateError("manifest alternativeGroups must be an array")
+    alternative_groups: List[Tuple[str, ...]] = []
+    for group in raw_groups:
+        if (
+            not isinstance(group, list)
+            or len(group) < 2
+            or not all(isinstance(member, str) and member for member in group)
+        ):
+            raise UpdateError(
+                "manifest alternativeGroups entries must be arrays of >=2 symbol names"
+            )
+        alternative_groups.append(tuple(group))
+
+    return ConsumerManifest(
+        name=name,
+        index_url=index_url,
+        game_versions=tuple(game_versions),
+        symbols=symbols,
+        optional_symbols=optional_symbols,  # type: ignore[arg-type]
+        numbered_patch_sets=tuple(patch_sets),
+        strip_payload_fields=strip_payload,
+        strip_record_fields=require_string_list(document.get("stripRecordFields"), "stripRecordFields"),
+        strip_top_level_fields=require_string_list(document.get("stripTopLevelFields"), "stripTopLevelFields"),
+        symbol_exemptions=symbol_exemptions,
+        alternative_groups=tuple(alternative_groups),
+    )
+
+
+def manifest_keep_set(manifest: ConsumerManifest, records: List[object]) -> Set[str]:
+    """Resolve the exact set of symbol names to keep for one snapshot.
+
+    Required symbols are always kept (absent ones are handled by the release
+    validator, not here). Optional symbols are kept only when present. A
+    numbered patch set is kept as a contiguous run starting at `_0`; the run
+    ends at the first missing index, matching the launcher's enumeration.
+    """
+    present_names = {
+        record.get("symbolName")
+        for record in records
+        if isinstance(record, dict)
+    }
+
+    keep: Set[str] = set()
+    for symbol in manifest.symbols:
+        keep.add(symbol)
+    for symbol in manifest.optional_symbols:
+        if symbol in present_names:
+            keep.add(symbol)
+
+    for prefix in manifest.numbered_patch_sets:
+        index = 0
+        while "{}_{}".format(prefix, index) in present_names:
+            keep.add("{}_{}".format(prefix, index))
+            index += 1
+
+    return keep
+
+
+def normalize_index_url(argument_value: Optional[str], manifest_value: Optional[str] = None) -> str:
     index_url = (argument_value or "").strip()
     if not index_url:
         index_url = os.environ.get(INDEX_URL_ENVIRONMENT_VARIABLE, "").strip()
+    if not index_url:
+        index_url = (manifest_value or "").strip()
     if not index_url:
         index_url = DEFAULT_INDEX_URL
 
@@ -207,6 +480,38 @@ def require_uint(
                 description,
                 name,
             )
+        )
+    return value
+
+
+def _validate_optional_uint(
+    source: Dict[str, object],
+    name: str,
+    description: str,
+    maximum: int,
+) -> Optional[int]:
+    value = source.get(name)
+    if value is None:
+        return None
+    if not is_uint(value, maximum):
+        raise UpdateError(
+            "{} contains an invalid unsigned field: {}".format(description, name)
+        )
+    return value
+
+
+def _validate_optional_string(
+    source: Dict[str, object],
+    name: str,
+    description: str,
+    maximum_length: int,
+) -> Optional[str]:
+    value = source.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value or len(value) > maximum_length:
+        raise UpdateError(
+            "{} contains an invalid string field: {}".format(description, name)
         )
     return value
 
@@ -322,12 +627,17 @@ def parse_index(contents: bytes, description: str) -> GameDataIndex:
                 )
             )
 
-        expected_file_name = "{}.{}.json".format(game_version, sha256)
-        if file_name != expected_file_name:
+        # Accept both the upstream content-addressed name
+        # (<gameVersion>.<sha256>.json) and the stable pruned name
+        # (<gameVersion>.json) this tool publishes.
+        content_addressed_name = "{}.{}.json".format(game_version, sha256)
+        pruned_name = "{}.json".format(game_version)
+        if file_name not in (content_addressed_name, pruned_name):
             raise UpdateError(
-                "{} URL is not content-addressed; expected {!r}".format(
+                "{} URL is neither content-addressed nor stable; expected {!r} or {!r}".format(
                     entry_description,
-                    expected_file_name,
+                    content_addressed_name,
+                    pruned_name,
                 )
             )
 
@@ -398,12 +708,6 @@ def validate_snapshot_contents(contents: bytes, entry: SnapshotEntry) -> None:
         "{} source".format(description),
         0xFFFFFFFF,
     )
-    require_uint(
-        source,
-        "configDigestVersion",
-        "{} source".format(description),
-        0xFFFFFFFF,
-    )
     analysis_output_contract_version = require_uint(
         source,
         "analysisOutputContractVersion",
@@ -417,24 +721,18 @@ def validate_snapshot_contents(contents: bytes, entry: SnapshotEntry) -> None:
                 analysis_output_contract_version,
             )
         )
-    config_sha256 = require_string(
-        source,
-        "configSha256",
-        "{} source".format(description),
-        80,
+
+    # Provenance fields are present in the upstream snapshot and stripped by a
+    # consumer manifest during pruning. They are validated when present but must
+    # not be required, so both raw (cached) and pruned (published) snapshots pass.
+    _validate_optional_uint(source, "configDigestVersion", "{} source".format(description), 0xFFFFFFFF)
+    config_sha256 = _validate_optional_string(
+        source, "configSha256", "{} source".format(description), 80
     )
-    source_file_count = require_uint(
-        source,
-        "fileCount",
-        "{} source".format(description),
-        MAXIMUM_RECORDS,
+    source_file_count = _validate_optional_uint(
+        source, "fileCount", "{} source".format(description), MAXIMUM_RECORDS
     )
-    require_string(
-        source,
-        "lastPublishTime",
-        "{} source".format(description),
-        128,
-    )
+    _validate_optional_string(source, "lastPublishTime", "{} source".format(description), 128)
 
     if source_game_version != entry.game_version:
         raise UpdateError("{} source.gameVersion does not match index".format(description))
@@ -442,9 +740,9 @@ def validate_snapshot_contents(contents: bytes, entry: SnapshotEntry) -> None:
         raise UpdateError(
             "{} source.snapshotSchemaVersion does not match index".format(description)
         )
-    if source_file_count != entry.file_count:
+    if source_file_count is not None and source_file_count != entry.file_count:
         raise UpdateError("{} source.fileCount does not match index".format(description))
-    if (
+    if config_sha256 is not None and (
         not config_sha256.startswith("sha256:")
         or not SHA256_PATTERN.fullmatch(config_sha256[7:])
     ):
@@ -890,90 +1188,284 @@ def validate_existing_directory(target_dir: Path) -> None:
     )
 
 
-def update_game_data(index_url: str, target_dir: Path, temp_root: Path) -> None:
-    log("checking {}".format(index_url))
-    remote_index_raw = fetch_index(index_url)
-    remote_index = parse_index(remote_index_raw, "remote index")
-
-    expected_names = {INDEX_FILE_NAME}
-    expected_names.update(entry.file_name for entry in remote_index.entries)
-    actual_names = collect_target_names(target_dir)
-    extra_names = sorted(actual_names - expected_names)
-
+def validate_manifest_coverage(target_dir: Path, manifest: ConsumerManifest) -> None:
+    """Check that the packaged target actually carries the manifest's symbols."""
     local_index_raw = read_local_index(target_dir)
-    index_is_identical = local_index_raw == remote_index.raw
+    if local_index_raw is None:
+        raise UpdateError("index.json is missing or invalid in {}".format(target_dir))
+    local_index = parse_index(local_index_raw, "local index")
+    by_game_version = {entry.game_version: entry for entry in local_index.entries}
 
-    reusable_entries: Dict[str, SnapshotEntry] = {}
-    invalid_entries: Dict[str, str] = {}
-    for entry in remote_index.entries:
-        reusable, reason = validate_local_snapshot(target_dir, entry)
-        if reusable:
-            reusable_entries[entry.file_name] = entry
-        else:
-            invalid_entries[entry.file_name] = reason
-
-    if (
-        index_is_identical
-        and not invalid_entries
-        and not extra_names
-        and actual_names == expected_names
-    ):
-        log(
-            "already up to date: {} snapshot(s), byte-identical index".format(
-                len(remote_index.entries)
-            )
-        )
-        return
-
-    if not index_is_identical:
-        log("remote index differs from the local index")
-    for file_name, reason in invalid_entries.items():
-        log("snapshot requires download: {} ({})".format(file_name, reason))
-    if extra_names:
-        log(
-            "target contains {} unreferenced item(s); directory will be normalized".format(
-                len(extra_names)
-            )
+    missing_versions = [gv for gv in manifest.game_versions if gv not in by_game_version]
+    if missing_versions:
+        raise UpdateError(
+            "target is missing manifest gameVersion(s): {}".format(", ".join(missing_versions))
         )
 
-    stage_dir = Path(tempfile.mkdtemp(prefix="metahook-gamedata-", dir=str(temp_root)))
-    reused_count = 0
-    downloaded_count = 0
-    try:
-        for entry in remote_index.entries:
-            staged_path = stage_dir / entry.file_name
-            reusable_entry = reusable_entries.get(entry.file_name)
-            if reusable_entry is not None and copy_reusable_snapshot(
-                target_dir / reusable_entry.file_name,
-                staged_path,
-                entry,
-            ):
-                reused_count += 1
-                continue
+    for game_version in manifest.game_versions:
+        entry = by_game_version[game_version]
+        document = parse_json_document(
+            (target_dir / entry.file_name).read_bytes(),
+            "snapshot {}".format(game_version),
+        )
+        if not isinstance(document, dict):
+            raise UpdateError("snapshot {} root is not an object".format(game_version))
+        records = document.get("records")
+        if not isinstance(records, list):
+            raise UpdateError("snapshot {} records is not an array".format(game_version))
+        present = {
+            record.get("symbolName")
+            for record in records
+            if isinstance(record, dict)
+        }
+        # Group members may satisfy each other: if any member of an alternative
+        # group is present, the others need not be (e.g. native cvar_hooks vs the
+        # numbered callsite patch set).
+        satisfied_by_group: Set[str] = set()
+        for group in manifest.alternative_groups:
+            if any(member in present for member in group):
+                satisfied_by_group.update(group)
 
-            snapshot_url = resolve_snapshot_url(index_url, entry.file_name)
-            log(
-                "downloading snapshot {} from {}".format(
-                    entry.game_version,
-                    snapshot_url,
+        absent = [
+            symbol
+            for symbol in manifest.symbols
+            if symbol not in present
+            and symbol not in satisfied_by_group
+            and game_version not in manifest.symbol_exemptions.get(symbol, ())
+        ]
+        if absent:
+            raise UpdateError(
+                "snapshot {} is missing required symbol(s): {}".format(
+                    game_version, ", ".join(absent)
                 )
             )
-            download_snapshot(snapshot_url, staged_path, entry)
-            downloaded_count += 1
 
-        (stage_dir / INDEX_FILE_NAME).write_bytes(remote_index.raw)
+    log(
+        "manifest '{}' coverage validated for {} ({} snapshot(s))".format(
+            manifest.name, target_dir, len(manifest.game_versions)
+        )
+    )
+
+
+def serialize_pruned(document: object) -> bytes:
+    """Deterministic, compact JSON with a trailing newline so the pruned bytes
+    (and therefore the index sha256) are stable across runs and platforms."""
+    text = json.dumps(document, ensure_ascii=False, separators=(",", ":"), sort_keys=False)
+    return (text + "\n").encode("utf-8")
+
+
+def prune_record(record: object, manifest: ConsumerManifest) -> Optional[dict]:
+    if not isinstance(record, dict):
+        return None
+    if record.get("platform") != "windows":
+        return None
+
+    pruned: dict = {}
+    for field in CONSUMED_RECORD_FIELDS:
+        if field in record and field not in manifest.strip_record_fields:
+            pruned[field] = record[field]
+
+    kind = record.get("kind")
+    if kind in CONSUMED_PAYLOAD_FIELDS:
+        payload = record.get("payload")
+        if isinstance(payload, dict):
+            stripped = set(manifest.strip_payload_fields.get(kind, ()))
+            keep = [
+                field
+                for field in CONSUMED_PAYLOAD_FIELDS[kind]
+                if field in payload and field not in stripped
+            ]
+            if keep:
+                pruned["payload"] = {field: payload[field] for field in keep}
+
+    return pruned
+
+
+def prune_snapshot(document: dict, manifest: ConsumerManifest) -> dict:
+    if document.get("schemaVersion") != SUPPORTED_SNAPSHOT_SCHEMA_VERSION:
+        raise UpdateError("snapshot schemaVersion is unsupported for pruning")
+    records = document.get("records")
+    if not isinstance(records, list):
+        raise UpdateError("snapshot records is not an array")
+
+    keep_set = manifest_keep_set(manifest, records)
+
+    kept_records = []
+    used_modules = set()
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        if record.get("symbolName") not in keep_set:
+            continue
+        pruned = prune_record(record, manifest)
+        if pruned is None:
+            continue
+        kept_records.append(pruned)
+        if isinstance(pruned.get("module"), str):
+            used_modules.add(pruned["module"])
+
+    # Emit only the top-level members the manifest permits. Anything not
+    # requested is dropped, so the C++ loader never reads a field this consumer
+    # did not ask to keep (and therefore never fails on a pruned field).
+    allowed_top = set(CONSUMED_TOP_LEVEL_FIELDS) - set(manifest.strip_top_level_fields)
+    pruned_document: dict = {}
+    for field in ("schemaVersion",):
+        if field in allowed_top and field in document:
+            pruned_document[field] = document[field]
+
+    source = document.get("source")
+    if "source" in allowed_top and isinstance(source, dict):
+        allowed_source = set(CONSUMED_SOURCE_FIELDS) - set(manifest.strip_top_level_fields)
+        pruned_source = {
+            field: source[field]
+            for field in CONSUMED_SOURCE_FIELDS
+            if field in allowed_source and field in source
+        }
+        if isinstance(source.get("gameVersion"), str):
+            pruned_source["gameVersion"] = source["gameVersion"]
+        pruned_document["source"] = pruned_source
+
+    binaries = document.get("binaries")
+    if "binaries" in allowed_top and isinstance(binaries, dict):
+        pruned_binaries: dict = {}
+        for module in used_modules:
+            entry = binaries.get(module)
+            if not isinstance(entry, dict):
+                continue
+            windows = entry.get("windows")
+            if not isinstance(windows, dict) or not isinstance(windows.get("crc64"), str):
+                continue
+            pruned_binaries[module] = {"windows": {"crc64": windows["crc64"]}}
+        pruned_document["binaries"] = pruned_binaries
+
+    if "records" in allowed_top:
+        pruned_document["records"] = kept_records
+
+    return pruned_document
+
+
+def select_manifest_entries(
+    index: GameDataIndex,
+    manifest: ConsumerManifest,
+) -> List[SnapshotEntry]:
+    by_game_version = {entry.game_version: entry for entry in index.entries}
+    missing = [gv for gv in manifest.game_versions if gv not in by_game_version]
+    if missing:
+        raise UpdateError(
+            "manifest '{}' names gameVersion(s) absent from the index: {}".format(
+                manifest.name, ", ".join(missing)
+            )
+        )
+    return [by_game_version[gv] for gv in manifest.game_versions]
+
+
+def ensure_cached_snapshot(
+    cache_root: Path,
+    target_dir: Path,
+    index_url: str,
+    entry: SnapshotEntry,
+) -> tuple:
+    """Return (path_to_valid_raw_snapshot, downloaded_bool).
+
+    Reuse order: the cache (keyed by upstream sha256), then the current pruned
+    target, then the network. The cache is authoritative because a pruned target
+    file no longer matches the upstream content-addressed name.
+    """
+    cache_path = cache_root / CACHE_RAW_DIRECTORY / CACHE_RAW_SNAPSHOT_DIRECTORY / entry.file_name
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if cache_path.is_file() and not cache_path.is_symlink():
+        valid, _ = validate_local_snapshot(cache_path.parent, entry)
+        if valid:
+            return cache_path, False
+
+    existing_target = target_dir / entry.file_name
+    if existing_target.is_file() and not existing_target.is_symlink():
+        valid, _ = validate_local_snapshot(target_dir, entry)
+        if valid and copy_reusable_snapshot(existing_target, cache_path, entry):
+            return cache_path, False
+
+    snapshot_url = resolve_snapshot_url(index_url, entry.file_name)
+    log("downloading snapshot {} from {}".format(entry.game_version, snapshot_url))
+    download_snapshot(snapshot_url, cache_path, entry)
+    return cache_path, True
+
+
+def update_game_data(
+    manifest: ConsumerManifest,
+    index_url: str,
+    target_dir: Path,
+    cache_root: Path,
+) -> None:
+    log("checking {}".format(index_url))
+    remote_index_raw: Optional[bytes] = None
+    used_offline_fallback = False
+    try:
+        remote_index_raw = fetch_index(index_url)
+    except UpdateError as error:
+        cached_index_path = cache_root / CACHE_RAW_DIRECTORY / CACHE_RAW_INDEX_FILE_NAME
+        if cached_index_path.is_file() and not cached_index_path.is_symlink():
+            remote_index_raw = cached_index_path.read_bytes()
+            used_offline_fallback = True
+            log("index download failed ({}); using the cached index".format(error))
+        else:
+            raise
+
+    remote_index = parse_index(remote_index_raw, "remote index")
+    entries = select_manifest_entries(remote_index, manifest)
+
+    stage_dir = Path(tempfile.mkdtemp(prefix="metahook-gamedata-", dir=str(cache_root)))
+    downloaded_count = 0
+    try:
+        pruned_versions = []
+        for entry in entries:
+            raw_path, downloaded = ensure_cached_snapshot(cache_root, target_dir, index_url, entry)
+            if downloaded:
+                downloaded_count += 1
+
+            document = parse_json_document(raw_path.read_bytes(), "snapshot {}".format(entry.game_version))
+            if not isinstance(document, dict):
+                raise UpdateError("snapshot {} root is not an object".format(entry.game_version))
+
+            pruned = prune_snapshot(document, manifest)
+            pruned_bytes = serialize_pruned(pruned)
+            file_name = "{}.json".format(entry.game_version)
+            (stage_dir / file_name).write_bytes(pruned_bytes)
+
+            kept_records = pruned.get("records", [])
+            pruned_versions.append(
+                {
+                    "gameVersion": entry.game_version,
+                    "url": file_name,
+                    "sha256": hashlib.sha256(pruned_bytes).hexdigest(),
+                    "size": len(pruned_bytes),
+                    "snapshotSchemaVersion": SUPPORTED_SNAPSHOT_CONTRACT_VERSION,
+                    "fileCount": len(kept_records),
+                    "lastPublishTime": entry.last_publish_time,
+                }
+            )
+
+        pruned_index = {"schemaVersion": SUPPORTED_INDEX_SCHEMA_VERSION, "versions": pruned_versions}
+        (stage_dir / INDEX_FILE_NAME).write_bytes(serialize_pruned(pruned_index))
+
         validate_existing_directory(stage_dir)
         publish_stage(stage_dir, target_dir)
+
+        # Persist the index we built from so the next run can build offline.
+        if not used_offline_fallback:
+            cached_index_path = cache_root / CACHE_RAW_DIRECTORY / CACHE_RAW_INDEX_FILE_NAME
+            cached_index_path.parent.mkdir(parents=True, exist_ok=True)
+            cached_index_path.write_bytes(remote_index_raw)
     finally:
         if stage_dir.exists():
             shutil.rmtree(str(stage_dir))
 
     log(
-        "published {} snapshot(s) to {} (reused {}, downloaded {})".format(
-            len(remote_index.entries),
+        "published {} pruned snapshot(s) to {} (downloaded {}, kept symbols from manifest '{}')".format(
+            len(entries),
             target_dir,
-            reused_count,
             downloaded_count,
+            manifest.name,
         )
     )
 
@@ -982,18 +1474,20 @@ def main() -> int:
     try:
         require_python_version()
         arguments = parse_arguments()
+        manifest = load_manifest(Path(arguments.manifest))
         target_dir = validate_target_path(Path(arguments.target_dir))
 
         if arguments.validate_only:
             validate_existing_directory(target_dir)
+            validate_manifest_coverage(target_dir, manifest)
             return 0
 
         if not arguments.temp_root:
             raise UpdateError("--temp-root is required unless --validate-only is used")
-        temp_root = validate_temp_root(Path(arguments.temp_root), target_dir)
-        index_url = normalize_index_url(arguments.index_url)
+        cache_root = validate_temp_root(Path(arguments.temp_root), target_dir)
+        index_url = normalize_index_url(arguments.index_url, manifest.index_url)
         with acquire_update_lock(target_dir):
-            update_game_data(index_url, target_dir, temp_root)
+            update_game_data(manifest, index_url, target_dir, cache_root)
         return 0
     except UpdateError as error:
         print(

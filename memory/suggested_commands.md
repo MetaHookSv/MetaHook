@@ -37,18 +37,27 @@ After dependencies have been prepared, disable online synchronization for an exi
 ```bat
 cmake -S . -B build/x86/Debug -DMETAHOOK_SYNC_GAMEDATA=OFF
 cmake --build build/x86/Debug --config Debug --target install
-python scripts/sync-gamedata.py --target-dir install/x86/Debug/svencoop/metahook/gamedata --validate-only
+python scripts/sync-gamedata.py --manifest scripts/manifests/metahook.json --target-dir install/x86/Debug/svencoop/metahook/gamedata --validate-only
 ```
 
 OFF installs any existing data without downloading; it does not promise that gamedata exists or is current. Restore normal synchronization with `-DMETAHOOK_SYNC_GAMEDATA=ON`. Target data paths must end in `metahook/gamedata`.
 
-The inherited full consumer gate is separate:
+A normal (online) synchronization with the persistent cache:
 
 ```bat
-python scripts/validate-gamedata.py install/x86/Debug/svencoop/metahook/gamedata
+python scripts/sync-gamedata.py --manifest scripts/manifests/metahook.json --target-dir build/x86/Debug/assets/svencoop/metahook/gamedata --temp-root build/x86/Debug/gamedata-sync
 ```
 
-It retains external plugin consumer requirements. Passing the build-time synchronization validator is not equivalent to running this full gate. The old `scripts/tests` suite was not migrated; do not claim it ran in this checkout.
+The raw upstream snapshots and the last index are kept under `--temp-root/raw`; a rerun reuses them, and if the index is unreachable the cached index is used so the build can proceed offline.
+
+The manifest-mode release gate, and the separate full consumer gate:
+
+```bat
+python scripts/validate-gamedata.py install/x86/Debug/svencoop/metahook/gamedata --manifest scripts/manifests/metahook.json
+python scripts/validate-gamedata.py install/x86/Debug/svencoop/metahook/gamedata --full-catalog
+```
+
+Manifest mode checks the pruned output against the launcher's required symbols. `--full-catalog` retains the external plugin consumer requirements and needs the complete upstream catalog; it must not be run against a pruned output. Passing the build-time synchronization validator is not equivalent to running the full gate. The old `scripts/tests` suite was not migrated; do not claim it ran in this checkout.
 
 ## Inspection
 

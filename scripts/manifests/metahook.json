@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "name": "metahook",
+  "indexUrl": "https://hlnd2t.github.io/GoldSrc_VibeSignatures/gamesymbols/index.json",
+  "gameVersions": [
+    "cof-5936",
+    "hl-10210",
+    "hl-3248",
+    "hl-3266",
+    "hl-3329",
+    "hl-3647",
+    "hl-4554",
+    "hl-6153",
+    "hl-8684",
+    "svencoop-10257",
+    "svencoop-8948"
+  ],
+  "symbols": {
+    "build_number": "function",
+    "Sys_Error": "function",
+    "ClientDLL_HudInit": "function",
+    "Cvar_DirectSet": "function",
+    "NLoadBlob": "function",
+    "FreeBlob": "function",
+    "cl_enginefuncs": "global",
+    "cl_funcs": "global",
+    "g_phClientModule": "global",
+    "g_pClientFactory": "global",
+    "videomode": "global",
+    "gClientUserMsgs": "global",
+    "cl_parsefuncs": "global"
+  },
+  "optionalSymbols": ["cvar_hooks"],
+  "symbolExemptions": {
+    "NLoadBlob": ["svencoop-10257", "svencoop-8948"],
+    "FreeBlob": ["svencoop-10257", "svencoop-8948"]
+  },
+  "numberedPatchSets": ["Cvar_Set_to_Cvar_DirectSet_callsite"],
+  "alternativeGroups": [
+    ["cvar_hooks", "Cvar_Set_to_Cvar_DirectSet_callsite_0"]
+  ],
+  "stripPayloadFields": {
+    "vtable": ["vtable_entries", "vtable_va"]
+  },
+  "stripRecordFields": ["id", "artifact"],
+  "stripTopLevelFields": ["modules"]
+}

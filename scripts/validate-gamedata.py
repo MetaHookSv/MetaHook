@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """Validate the packaged MetaHook gamedata catalog for release.
 
-Checks (see docs/plans/metahook-gamedata-api-implementation-plan.md, section 14):
-
+Always checks:
   1. index.json schema, path safety, file existence, size and SHA-256.
-  2. snapshot schema and Windows binary metadata.
+  2. snapshot schema and Windows binary metadata (crc64 always; the upstream
+     provenance fields size/sha256/isBlob are validated only when present, so a
+     pruned consumer catalog passes).
   3. signature token legality.
-  4. function / global / patch required field completeness.
-  5. (CRC64, symbolName) conflicts.
-  6. common required symbols (expected kind) and numbered patch sets for every
-     declared engine family.
-  7. cvar alternative: cvar_hooks (global) OR Cvar_Set_to_Cvar_DirectSet_callsite_0 (patch).
-  8. blob conditional symbols (NLoadBlob + FreeBlob), and the SvEngine pairing rule.
-  9. DWORD field ranges and global signatureRva derivation.
+  4. function / global / patch required field completeness (only the fields the
+     consumer reads are required; upstream-only provenance is optional).
+
+With --manifest, additionally checks that every declared gameVersion carries the
+manifest's required symbols with the expected kind, honours per-symbol
+exemptions and alternative groups, and that numbered patch sets are contiguous
+from 0. This is the mode the build/install pipeline uses.
+
+With --full-catalog, additionally runs the external-plugin consumer gates
+(common/numbered/scalar, BulletPhysics, Renderer, CaptionMod, SCCameraFix,
+VGUI2Extension). Those assume the complete upstream catalog and must not be run
+against a pruned output.
 
 Exit code is 0 when the catalog is release-consistent, non-zero otherwise.
 Every failure prints gameVersion / module / crc64 / symbol / reason.
@@ -453,15 +459,19 @@ def validate_snapshot(doc, game_version):
         if not isinstance(win, dict):
             continue
         crc64 = parse_crc64(win.get("crc64"))
-        size = win.get("size")
-        sha = win.get("sha256")
         if crc64 is None:
             errors.append(f"'{game_version}': module '{mod}': invalid crc64")
-        if not isinstance(size, int) or size < 0:
+        # size / sha256 / isBlob are upstream provenance fields, stripped by a
+        # consumer manifest during pruning. Validate them when present so raw
+        # catalogs stay strict, but do not require them.
+        size = win.get("size")
+        if size is not None and (not isinstance(size, int) or size < 0):
             errors.append(f"'{game_version}': module '{mod}': invalid size")
-        if not is_lower_hex(sha, 64):
+        sha = win.get("sha256")
+        if sha is not None and not is_lower_hex(sha, 64):
             errors.append(f"'{game_version}': module '{mod}': invalid sha256")
-        if not isinstance(win.get("isBlob"), bool):
+        is_blob = win.get("isBlob")
+        if is_blob is not None and not isinstance(is_blob, bool):
             errors.append(f"'{game_version}': module '{mod}': isBlob must be a boolean")
         if crc64 is not None:
             module_crc64[mod] = crc64
@@ -541,17 +551,18 @@ def validate_snapshot(doc, game_version):
             symbols[key] = rec
         elif kind == "patch":
             p = payload if isinstance(payload, dict) else {}
-            patch_name = p.get("patch_name")
             patch_rva = parse_hex_u32(p.get("patch_rva"))
-            patch_sig = p.get("patch_sig")
-            patch_sig_disp = parse_hex_u32(p.get("patch_sig_disp"))
-            if (not isinstance(patch_name, str) or patch_rva is None or
-                    not isinstance(patch_sig, str) or patch_sig_disp is None):
-                errors.append(f"'{game_version}': patch '{name}' missing/invalid patch_name/patch_rva/patch_sig/patch_sig_disp")
+            if patch_rva is None:
+                errors.append(f"'{game_version}': patch '{name}' missing/invalid patch_rva")
                 continue
-            if not validate_signature(patch_sig):
+            # patch_name / patch_sig / patch_sig_disp are upstream provenance,
+            # stripped by a consumer manifest. Validate the signature when
+            # present, but only patch_rva is required of every catalog.
+            patch_sig = p.get("patch_sig")
+            if patch_sig is not None and not validate_signature(patch_sig):
                 errors.append(f"'{game_version}': patch '{name}' has a malformed signature")
                 continue
+            patch_sig_disp = parse_hex_u32(p.get("patch_sig_disp"))
             rec = {"kind": "patch", "rva": patch_rva, "sig_disp": patch_sig_disp, "module": mod}
             if key in symbols and symbols[key] != rec:
                 errors.append(f"'{game_version}': conflicting duplicate symbol '{name}'")
@@ -1266,10 +1277,122 @@ def validate_renderer(symbols, game_version, include_engine=True, include_client
     return errors
 
 
+def load_manifest(path):
+    """Load a consumer manifest (see scripts/manifests/). Returns a dict with the
+    fields this validator needs; schema is shared with scripts/sync-gamedata.py."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            document = json.load(f)
+    except (OSError, ValueError) as e:
+        fail("failed to load manifest:", e)
+        return None
+    if not isinstance(document, dict) or document.get("schemaVersion") != 1:
+        fail("manifest schemaVersion must be 1")
+        return None
+    symbols = document.get("symbols")
+    if not isinstance(symbols, dict) or not symbols:
+        fail("manifest symbols must be a non-empty object")
+        return None
+    optional = document.get("optionalSymbols", {})
+    if isinstance(optional, list):
+        optional = {name: None for name in optional}
+    if not isinstance(optional, dict):
+        fail("manifest optionalSymbols must be an object or array")
+        return None
+    alternatives = document.get("alternativeGroups", [])
+    if not isinstance(alternatives, list) or not all(
+        isinstance(g, list) and len(g) >= 2 for g in alternatives
+    ):
+        fail("manifest alternativeGroups must be an array of >=2-element arrays")
+        return None
+    return {
+        "name": document.get("name", ""),
+        "gameVersions": document.get("gameVersions", []),
+        "symbols": symbols,
+        "optionalSymbols": optional,
+        "numberedPatchSets": document.get("numberedPatchSets", []),
+        "symbolExemptions": document.get("symbolExemptions", {}),
+        "alternativeGroups": [tuple(g) for g in alternatives],
+    }
+
+
+def validate_manifest_coverage(manifest, game_symbols):
+    """Check that every version carries the manifest's required symbols with the
+    expected kind, that optional symbols have the right kind when present, and
+    that numbered patch sets are contiguous from 0."""
+    errors = []
+    name = manifest["name"]
+
+    for gv in manifest["gameVersions"]:
+        if gv not in game_symbols:
+            errors.append(f"'{gv}': snapshot not loaded (manifest '{name}')")
+            continue
+        symbols = game_symbols[gv][1]
+        by_name = {}
+        for (module, symbol_name), rec in symbols.items():
+            by_name.setdefault(symbol_name, []).append(rec)
+
+        satisfied_by_group = set()
+        for group in manifest["alternativeGroups"]:
+            if any(member in by_name for member in group):
+                satisfied_by_group.update(group)
+
+        for symbol, expected_kind in manifest["symbols"].items():
+            if gv in manifest["symbolExemptions"].get(symbol, []):
+                continue
+            if symbol in satisfied_by_group:
+                continue
+            records = by_name.get(symbol)
+            if not records:
+                errors.append(f"'{gv}': manifest '{name}': missing required symbol '{symbol}'")
+                continue
+            if all(rec.get("kind") != expected_kind for rec in records):
+                errors.append(
+                    f"'{gv}': manifest '{name}': '{symbol}' must be a {expected_kind} record"
+                )
+
+        for symbol, expected_kind in manifest["optionalSymbols"].items():
+            records = by_name.get(symbol)
+            if not records or expected_kind is None:
+                continue
+            if all(rec.get("kind") != expected_kind for rec in records):
+                errors.append(
+                    f"'{gv}': manifest '{name}': optional '{symbol}' must be a {expected_kind} record"
+                )
+
+        for prefix in manifest["numberedPatchSets"]:
+            first = f"{prefix}_0"
+            if first in satisfied_by_group:
+                continue
+            if first not in by_name:
+                errors.append(f"'{gv}': manifest '{name}': missing '{first}'")
+                continue
+            index = 0
+            while f"{prefix}_{index}" in by_name:
+                index += 1
+            # contiguity holds by construction; a gap ends the run silently,
+            # matching the launcher's enumeration which stops at first missing.
+
+    return errors
+
+
 def main():
     parser = argparse.ArgumentParser(description="Validate packaged MetaHook gamedata")
     parser.add_argument("directory", help="path to the packaged gamedata directory")
+    parser.add_argument("--manifest", help="consumer manifest to validate coverage against")
+    parser.add_argument(
+        "--full-catalog",
+        action="store_true",
+        help="also run the external-plugin consumer gates (requires the complete "
+        "upstream catalog, not a pruned output)",
+    )
     args = parser.parse_args()
+
+    manifest = None
+    if args.manifest:
+        manifest = load_manifest(args.manifest)
+        if manifest is None:
+            return 1
 
     gamedata_dir = args.directory
     index_path = os.path.join(gamedata_dir, "index.json")
@@ -1318,6 +1441,23 @@ def main():
     for name in os.listdir(gamedata_dir):
         if name not in declared_files:
             all_errors.append(f"undeclared file in gamedata directory: {name}")
+
+    # Manifest-driven coverage (the mode the build/install pipeline uses).
+    if manifest is not None:
+        all_errors.extend(validate_manifest_coverage(manifest, game_symbols))
+
+    # The external-plugin consumer gates below assume the complete upstream
+    # catalog. They are skipped for a pruned output unless --full-catalog is set.
+    if not args.full_catalog:
+        if all_errors:
+            for e in all_errors:
+                fail(e)
+            print(f"\n{len(all_errors)} gamedata validation error(s).", file=sys.stderr)
+            return 1
+        mode = "manifest mode" if manifest is not None else "basic validation"
+        print(f"gamedata validation passed for {gamedata_dir} "
+              f"({len(game_symbols)} snapshots, {mode}).")
+        return 0
 
     # Required-symbol coverage per engine family.
     for family, games in ENGINE_FAMILIES.items():

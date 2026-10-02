@@ -75,6 +75,7 @@ if(METAHOOK_SYNC_GAMEDATA)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_custom_target(MetaHookGameData
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/sync-gamedata.py"
+            --manifest "${CMAKE_CURRENT_SOURCE_DIR}/scripts/manifests/metahook.json"
             --target-dir "${METAHOOK_GAMEDATA_DIR}" --temp-root "${CMAKE_BINARY_DIR}/gamedata-sync"
         COMMENT "Synchronizing and validating MetaHook gamedata"
         VERBATIM

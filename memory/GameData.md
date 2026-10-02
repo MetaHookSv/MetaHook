@@ -25,8 +25,9 @@ GameData 是 launcher 与插件共享的本地符号 catalog，从 `<game>/<mod>
 - `include/metahook.h`：`METAHOOK_API_VERSION 115`、`mh_gamesymbol_t`、kind/status 枚举与尾部追加的 API 槽位。
 - `src/metahook.cpp`：初始化 catalog、注册 PE/blob/mirror 身份，按数据决定引擎类型并解析本体所需地址。
 - `src/LoadDllNotification.cpp`：加载/卸载事件触发模块身份失效，传递 loader-critical-region 状态。
-- `scripts/sync-gamedata.py`：HTTPS index 下载、完整性校验、同卷 staging 和事务式发布；`--validate-only` 可离线验证。
-- `scripts/validate-gamedata.py`：完整发布/消费者门禁，仍包含外部插件所需符号集合。
+- `scripts/sync-gamedata.py`：读取 manifest，HTTPS index 下载、原始快照持久缓存、按 manifest 裁剪（symbols + 字段）、稳定命名发布；`--validate-only` 离线校验并核对 manifest 覆盖。
+- `scripts/manifests/metahook.json`：launcher 的 manifest（支持的 gameVersions、必需/可选 symbols、编号 patch set、替代组、字段裁剪表）。插件可提供同 schema 的 manifest 复用同步器。
+- `scripts/validate-gamedata.py`：manifest 模式的发布门禁（`--manifest`）；`--full-catalog` 保留外部插件完整消费者门禁，需完整上游 catalog。
 - `CMakeLists.txt`：构建前同步目标、配置选项和安装路径；RapidJSON 与 Chocobo1Hash 由固定 submodule 提供。
 
 ## 长期架构约定
@@ -91,7 +92,9 @@ API 115 把旧的 `cbSize < sizeof(mh_gamesymbol_t)` 拒绝规则改成版本化
 
 ## 构建、安装与验证边界
 
-`METAHOOK_SYNC_GAMEDATA=ON` 时，CMake 每次构建调用同步器，输出默认在 `build/x86/<configuration>/assets/svencoop/metahook/gamedata`，同卷临时目录为该 build tree 的 `gamedata-sync`。同步失败直接失败；不把旧数据当作同步成功。安装到 `install/x86/<configuration>/svencoop/metahook/gamedata`。OFF 仅安装已有数据，不触发下载。
+`METAHOOK_SYNC_GAMEDATA=ON` 时，CMake 每次构建调用同步器（带 `--manifest scripts/manifests/metahook.json`），输出默认在 `build/x86/<configuration>/assets/svencoop/metahook/gamedata`：`index.json` 加每个版本的稳定 `<gameVersion>.json`（如 `hl-4554.json`），只保留 manifest 声明的 launcher symbols 与 GameData 实际读取的字段。原始上游快照与最后一次 index 持久缓存在 `build/x86/<configuration>/gamedata-sync/raw`，后续构建复用；index 不可达时回退缓存 index 以支持离线构建，缓存不在构建间清理。安装到 `install/x86/<configuration>/svencoop/metahook/gamedata`。OFF 仅安装已有数据，不触发下载。
+
+发布门禁为 `scripts/validate-gamedata.py <dir> --manifest scripts/manifests/metahook.json`（校验 manifest 覆盖）；`--full-catalog` 才运行面向外部插件的完整消费者门禁，需要完整上游 catalog，不能用于裁剪输出。插件可提供自己的同 schema manifest 与本插件 gamedata 目录（launcher 会合并嵌套 `metahook/gamedata/**/index.json`）。
 
 完整校验器保留源仓库的消费者门禁：按 `(module, name)` 建键，允许同名跨模块，不允许同一模块名字的冲突记录。运行时则按 `(moduleCRC64, name)` 建键；共享 DLL 可使不同游戏使用同一 catalog 身份。上游有记录不等于每个消费者都需要它：新增必需门禁前先确认真实读取/调用点、可达游戏集合及模块身份。
 

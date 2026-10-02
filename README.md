@@ -15,7 +15,7 @@ plugin-facing ABI.
 - Loads client-side plugins and manages their lifecycle.
 - Provides plugins with engine symbol resolution, hooking (inline, VFT, IAT and
   inline-patch), memory and disassembly access, and DLL load notifications.
-- Serves engine symbol data from a validated gamedata catalog.
+- Serves engine symbol data from a validated, pruned gamedata catalog.
 
 ## Supported targets
 
@@ -35,7 +35,11 @@ installation.
    executable lives.
 3. Copy `svencoop/metahook/gamedata` from the install tree to
    `<game>/<mod>/metahook/gamedata`. The catalog must match the game and mod you
-   launch.
+   launch. Each game version is a single stable `<gameVersion>.json` (for
+   example `hl-4554.json`), pruned to the symbols the launcher resolves, so the
+   directory stays small and old versions do not accumulate. The launcher also
+   merges any nested `metahook/gamedata/**/index.json`, which is how a plugin
+   ships its own catalog alongside the launcher's.
 4. The SDL runtime package (`SDL2.dll`, `SDL3.dll`) is built and installed
    alongside the launcher for games using these forks. Deploy the matching pair
    together when updating those runtimes; building does not modify a game installation.
@@ -83,6 +87,18 @@ Renderer consumes these headers without building SDL again, for example:
 ```bat
 D:\Renderer\scripts\build-Renderer-x86-Release.bat "-DSDL2_INCLUDE_DIRS=D:/MetaHook/install/x86/Release/include" "-DSDL3_INCLUDE_DIRS=D:/MetaHook/install/x86/Release/include"
 ```
+
+Gamedata synchronization is manifest-driven. `scripts/manifests/metahook.json`
+declares the game versions and the exact symbols the launcher resolves; the
+synchronizer downloads the upstream catalog into a persistent cache under
+`build/x86/<configuration>/gamedata-sync/`, prunes each version to those symbols
+(and to the payload fields the loader reads), and publishes `index.json` plus one
+`<gameVersion>.json` per version. Because the cache is kept, later builds reuse
+it and can build offline. A plugin can ship its own manifest with the same schema
+and run `scripts/sync-gamedata.py --manifest <its manifest>` to produce its own
+catalog. The release gate is `scripts/validate-gamedata.py <dir> --manifest
+scripts/manifests/metahook.json` (add `--full-catalog` to also run the external
+plugin consumer gates against a complete catalog).
 
 Offline builds and direct CMake usage are documented in
 `memory/suggested_commands.md`; dependency pinning, build internals and the
