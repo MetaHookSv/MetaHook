@@ -74,7 +74,18 @@ emits existing CMake policy deprecation warnings; a clean Debug link reports
 LNK4075 from VC-LTL's `libvcruntimed.lib` because incremental linking is
 disabled, as in the original launcher project. Neither prevented a build.
 
-## Limitations
+## SDL runtime and SDK ownership (2026-10-02)
+
+- Trigger: the user moved SDL build ownership out of Renderer and explicitly requested that this repository build/install SDL2 and SDL3.
+- Constraint: preserve the existing fork commits, feature choices, static CRT and VC-LTL configuration; do not modify vendor source or add an SDL link dependency to the launcher.
+- Implementation: `METAHOOK_BUILD_SDL` defaults ON. `cmake/SDL.cmake` builds SDL3 first, then sdl2-compat against its `SDL3::Headers` target. Both use the parent's VC-LTL settings. Vendor install rules retain headers, generated revision headers, import libraries, package metadata and licenses; DLLs go beside MetaHook.exe via `CMAKE_INSTALL_BINDIR=.`. No game directory is modified.
+- Pins: SDL3 (`https://github.com/hzqst/SDL`) at `3d20d7638918bdda5f428674b4acb3cc5b85d93e`; sdl2-compat (`https://github.com/hzqst/sdl2-compat-fork`) at `c24acad1544e91f413a0f628a160ca43e20bd995`. Source checkouts remain unmodified.
+- Feature selection matches the original MetaHookSv scripts: shared SDL3, no static SDL3/test library/test executables, render/GPU/joystick/haptic/WASAPI disabled; sdl2-compat shared, test executables and CPack disabled. Its upstream helper libraries remain part of SDK installation.
+- Verification: both normal build entrypoints configured, compiled, synchronized gamedata and installed with exit 0. Both configs installed SDL2.dll/SDL3.dll, include/SDL2 and include/SDL3 (including generated SDL_revision.h), import libraries and licenses. Generated SDL targets use MTd/MT and the expected VC-LTL paths. PE inspection confirms x86; SDL3 imports msvcrt.dll, while sdl2-compat retains its original CRT-free linkage. An x86 smoke program linked to the installed SDL2 import library successfully calls SDL_Init(0), SDL_GetVersion (2.32.57), and SDL_Quit with each installed DLL pair.
+- Consumer verification: Renderer builds from the installed SDK in both configs; compiler dependency logs confirm installed SDL2 header paths and both configurations pass 4/4 CTest. Debug also verifies SDL3_INCLUDE_DIRS is optional. Missing SDL2 paths and invalid SDL3 paths fail configuration with exit 1. Renderer contains no SDL submodule or SDL build target.
+- Launcher-only configuration with `METAHOOK_BUILD_SDL=OFF` succeeds. This smoke test does not validate window creation, audio/video devices, game startup or gameplay. Logs and temporary smoke artifacts are under ignored build/verification/.
+
+## Runtime and verification limitations
 
 - Build success does not validate game startup, plugin loading or gameplay.
 - Game startup/plugin compatibility and remote recursive cloning remain untested

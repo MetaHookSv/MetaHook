@@ -7,13 +7,14 @@ if(NOT WIN32 OR NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "MetaHook requires Windows MSVC x86. Configure with -A Win32.")
 endif()
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Supported configurations" FORCE)
+option(METAHOOK_BUILD_SDL "Build and install SDL2/SDL3 runtimes and SDK headers" ON)
 
 include(cmake/Dependencies.cmake)
 metahook_prepare_dependencies()
 include("${VC_LTL_Root}/VC-LTL helper for cmake.cmake")
 
-# The parent already applies VC-LTL to all targets, including Capstone.
-set(USE_VCLTL OFF CACHE BOOL "Capstone's separate VC-LTL integration" FORCE)
+# The parent already applies VC-LTL to all dependency targets.
+set(USE_VCLTL OFF CACHE BOOL "Separate vendor VC-LTL integration" FORCE)
 set(CAPSTONE_ARCHITECTURE_DEFAULT OFF CACHE BOOL "" FORCE)
 set(CAPSTONE_X86_SUPPORT ON CACHE BOOL "" FORCE)
 set(CAPSTONE_BUILD_STATIC ON CACHE BOOL "" FORCE)
@@ -23,6 +24,9 @@ foreach(option BUILD_SHARED BUILD_TESTS BUILD_CSTOOL INSTALL BUILD_DIET)
 endforeach()
 add_subdirectory(thirdparty/capstone_fork EXCLUDE_FROM_ALL)
 add_subdirectory(thirdparty/MemoryModulePP EXCLUDE_FROM_ALL)
+if(METAHOOK_BUILD_SDL)
+    include(cmake/SDL.cmake)
+endif()
 
 add_executable(MetaHook WIN32
     src/commandline.cpp

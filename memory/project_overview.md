@@ -26,9 +26,9 @@ MetaHook is the standalone Windows x86 launcher and public API for GoldSrc/SvEng
 
 - Windows x86, Visual Studio 2022 v143, C++20, CMake 3.21+; Debug and Release use `/MTd` and `/MT` with VC-LTL.
 - `CMakeLists.txt` defines the launcher and static dependencies. `cmake/Dependencies.cmake` initializes missing submodules and downloads/verifies VC-LTL 5.3.1 using the package's helper.
-- Fixed source submodules: Detours, Capstone, RapidJSON, Chocobo1Hash, Musa.Veil and MemoryModulePP.
+- Fixed source submodules: Detours, Capstone, RapidJSON, Chocobo1Hash, Musa.Veil, MemoryModulePP, SDL3 and sdl2-compat.
 - MemoryModulePP's initial commit `d3c042a` is local only at migration time; publish it before expecting a remote recursive clone to work.
-- Python 3.8+ runs gamedata synchronization/validation. There is no renderer, OpenGL, physics or SDL build dependency for this launcher target.
+- Python 3.8+ runs gamedata synchronization/validation. The launcher target itself does not link Renderer, OpenGL, physics or SDL. The package builds SDL2/SDL3 runtimes and SDK headers through `cmake/SDL.cmake` when `METAHOOK_BUILD_SDL` is ON (default); Renderer consumes those headers externally.
 - Commands: [[metahook/suggested-commands]]. Build internals, dependency pinning and migration verification: [[metahook/build-and-verification]]. User-facing deployment: root `README.md`.
 
 ## Layout and entry points
@@ -39,7 +39,7 @@ MetaHook is the standalone Windows x86 launcher and public API for GoldSrc/SvEng
 - `include/metahook.h`, `include/Interface/IPlugins.h`: public host/plugin contracts.
 - `scripts/`: two configuration-specific build entrypoints and gamedata tools.
 - `build/x86/<configuration>/`: generated projects, objects and staged gamedata; ignored.
-- `install/x86/<configuration>/`: executable, PDB and `svencoop/metahook/gamedata`; ignored.
+- `install/x86/<configuration>/`: executable, PDB, SDL2/SDL3 DLLs, SDL SDK headers/libraries/licenses and `svencoop/metahook/gamedata`; ignored.
 - Runtime plugins/configs live in the target game's `<mod>/metahook/` tree, not in repository-root `plugins.lst`.
 
 The source supports GoldSrc, GoldSrc HL25, SvEngine, CoF and legacy blob paths. Actual startup requires a matching catalog identity and data. Blob compilation is enabled by `_DEBUG` or `METAHOOK_BLOB_SUPPORT`; the current Release target does not enable it. These are implementation capabilities, not a new game compatibility certification.

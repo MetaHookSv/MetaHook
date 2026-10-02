@@ -16,3 +16,9 @@
 [submodule "thirdparty/MemoryModulePP"]
 	path = thirdparty/MemoryModulePP
 	url = https://github.com/MetaHookSv/MemoryModulePP
+[submodule "thirdparty/SDL3_fork"]
+	path = thirdparty/SDL3_fork
+	url = https://github.com/hzqst/SDL
+[submodule "thirdparty/sdl2-compat-fork"]
+	path = thirdparty/sdl2-compat-fork
+	url = https://github.com/hzqst/sdl2-compat-fork

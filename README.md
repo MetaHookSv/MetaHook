@@ -36,6 +36,9 @@ installation.
 3. Copy `svencoop/metahook/gamedata` from the install tree to
    `<game>/<mod>/metahook/gamedata`. The catalog must match the game and mod you
    launch.
+4. The SDL runtime package (`SDL2.dll`, `SDL3.dll`) is built and installed
+   alongside the launcher for games using these forks. Deploy the matching pair
+   together when updating those runtimes; building does not modify a game installation.
 
 Launching:
 
@@ -64,8 +67,22 @@ scripts\build-MetaHook-x86-Release.bat
 
 Each script configures, builds and installs one configuration, and returns a
 nonzero exit code on failure. The install tree
-(`install/x86/<configuration>/`) contains `MetaHook.exe`, its PDB, and validated
-gamedata under `svencoop/metahook/gamedata`.
+(`install/x86/<configuration>/`) contains `MetaHook.exe`, its PDB, SDL2/SDL3 DLLs,
+and validated gamedata under `svencoop/metahook/gamedata`. SDL SDK headers are
+installed under `include/SDL2` and `include/SDL3`, import libraries under `lib`,
+with upstream CMake package files and licenses also retained.
+
+`METAHOOK_BUILD_SDL` defaults to `ON`. SDL3 and sdl2-compat are built from the
+original fixed fork commits with shared DLLs, static CRT and the parent's VC-LTL
+settings. The original SDL feature selection is preserved; the launcher does
+not acquire a new SDL link dependency. Direct CMake users can set
+`-DMETAHOOK_BUILD_SDL=OFF` for a launcher-only build.
+
+Renderer consumes these headers without building SDL again, for example:
+
+```bat
+D:\Renderer\scripts\build-Renderer-x86-Release.bat "-DSDL2_INCLUDE_DIRS=D:/MetaHook/install/x86/Release/include" "-DSDL3_INCLUDE_DIRS=D:/MetaHook/install/x86/Release/include"
+```
 
 Offline builds and direct CMake usage are documented in
 `memory/suggested_commands.md`; dependency pinning, build internals and the

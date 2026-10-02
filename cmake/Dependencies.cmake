@@ -2,7 +2,11 @@ set(METAHOOK_DEPENDENCY_CACHE_DIR "${PROJECT_SOURCE_DIR}/thirdparty/cache" CACHE
 set(VC_LTL_Root "${METAHOOK_DEPENDENCY_CACHE_DIR}/VC-LTL-5.3.1" CACHE PATH "VC-LTL binary package root")
 
 function(metahook_prepare_dependencies)
-    foreach(module Detours_fork capstone_fork rapidjson Chocobo1Hash Musa.Veil_fork MemoryModulePP)
+    set(modules Detours_fork capstone_fork rapidjson Chocobo1Hash Musa.Veil_fork MemoryModulePP)
+    if(METAHOOK_BUILD_SDL)
+        list(APPEND modules SDL3_fork sdl2-compat-fork)
+    endif()
+    foreach(module IN LISTS modules)
         if(NOT EXISTS "${PROJECT_SOURCE_DIR}/thirdparty/${module}/.git")
             find_package(Git REQUIRED)
             execute_process(
