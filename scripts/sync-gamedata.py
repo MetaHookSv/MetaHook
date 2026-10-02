@@ -142,6 +142,18 @@ class GameDataIndex:
 
 
 @dataclass(frozen=True)
+class ConditionalGroup:
+    """Symbols required only under a condition. `when` members are OR-ed
+    conditions; an empty `when` matches every declared gameVersion. `exempt`
+    names gameVersions the group does not apply to. `numbered_prefixes` are
+    numbered patch sets (contiguous from _0) checked inside the group."""
+    when: Tuple[str, ...]
+    exempt: Tuple[str, ...]
+    symbols: Dict[str, Dict[str, str]]  # moduleName -> {symbolName: expectedKind}
+    numbered_prefixes: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ConsumerManifest:
     """A consumer's declaration of which symbols it needs and which fields it
     reads. Shared by the launcher and by external plugins so the same
@@ -150,18 +162,100 @@ class ConsumerManifest:
     name: str
     index_url: Optional[str]
     game_versions: Tuple[str, ...]
-    symbols: Dict[str, str]  # symbolName -> expected kind
-    optional_symbols: Dict[str, str]  # symbolName -> expected kind (present-only)
-    numbered_patch_sets: Tuple[str, ...]
+    # moduleName -> {symbolName: expectedKind} for symbols required on every
+    # declared gameVersion. A bare string kind is treated as module "engine".
+    symbols: Dict[str, Dict[str, str]]
+    # moduleName -> {symbolName: expectedKind} kept when present, not required.
+    optional_symbols: Dict[str, Dict[str, str]]
+    # (moduleName, prefix) numbered patch sets required on every gameVersion.
+    numbered_patch_sets: Tuple[Tuple[str, str], ...]
     strip_payload_fields: Dict[str, Tuple[str, ...]]  # kind -> fields to drop
     strip_record_fields: Tuple[str, ...]
     strip_top_level_fields: Tuple[str, ...]
-    # symbolName -> gameVersions where it is deliberately absent and therefore
-    # not required (e.g. NLoadBlob/FreeBlob on SvEngine). Still kept when present.
+    # symbol -> gameVersions where it is deliberately absent and not required.
     symbol_exemptions: Dict[str, Tuple[str, ...]]
-    # Groups where at least one member must be present (e.g. native cvar_hooks
-    # OR the numbered Cvar_Set_to_Cvar_DirectSet_callsite_N patch set).
+    # Groups where at least one member must be present (per module).
     alternative_groups: Tuple[Tuple[str, ...], ...]
+    # Conditional requirement groups (engine-family / identity conditions).
+    conditional_groups: Tuple[ConditionalGroup, ...]
+
+
+def _flatten_module_symbols(value: object, field: str) -> Dict[str, Dict[str, str]]:
+    """Normalise a symbols block into {module: {name: kind}}.
+
+    Accepts either the flat form ({name: kind}, module defaults to "engine") or
+    the module-scoped form ({module: {name: kind}}).
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise UpdateError("manifest {} must be an object".format(field))
+
+    # Module-scoped when every value is a mapping (name.kind) or a list of names
+    # (present-only, any kind). Otherwise the whole block is a flat engine map.
+    module_scoped = len(value) > 0 and all(
+        isinstance(v, (dict, list)) for v in value.values()
+    )
+
+    result: Dict[str, Dict[str, str]] = {}
+    if module_scoped:
+        for module, mapping in value.items():
+            if not isinstance(module, str) or not module:
+                raise UpdateError("manifest {} has an invalid module name".format(field))
+            if isinstance(mapping, list):
+                names: Dict[str, str] = {}
+                for symbol in mapping:
+                    if not isinstance(symbol, str) or not symbol:
+                        raise UpdateError(
+                            "manifest {}['{}'] contains an invalid symbol name".format(field, module)
+                        )
+                    names[symbol] = ""
+                result[module] = names
+            else:
+                result[module] = _validate_kind_map(mapping, "{}['{}']".format(field, module))
+    else:
+        result["engine"] = _validate_kind_map(value, field)
+    return result
+
+
+def _validate_kind_map(value: object, field: str) -> Dict[str, str]:
+    if not isinstance(value, dict):
+        raise UpdateError("manifest {} must be an object".format(field))
+    result: Dict[str, str] = {}
+    for symbol, kind in value.items():
+        if not isinstance(symbol, str) or not symbol:
+            raise UpdateError("manifest {} contains an invalid symbol name".format(field))
+        if kind is None:
+            result[symbol] = ""  # present-only, any kind
+            continue
+        if kind not in KIND_LITERALS:
+            raise UpdateError(
+                "manifest {} entry '{}' has an unsupported kind: {!r}".format(field, symbol, kind)
+            )
+        result[symbol] = kind
+    return result
+
+
+def _parse_numbered_sets(value: object) -> Tuple[Tuple[str, str], ...]:
+    """Normalise numberedPatchSets into (module, prefix) pairs. Accepts a bare
+    string prefix (module "engine") or a {module, prefix} object."""
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise UpdateError("manifest numberedPatchSets must be an array")
+    result: List[Tuple[str, str]] = []
+    for item in value:
+        if isinstance(item, str) and item:
+            result.append(("engine", item))
+        elif isinstance(item, dict):
+            module = item.get("module", "engine")
+            prefix = item.get("prefix")
+            if not isinstance(module, str) or not module or not isinstance(prefix, str) or not prefix:
+                raise UpdateError("manifest numberedPatchSets entry is invalid")
+            result.append((module, prefix))
+        else:
+            raise UpdateError("manifest numberedPatchSets entry is invalid")
+    return tuple(result)
 
 
 def log(message: str) -> None:
@@ -250,46 +344,22 @@ def load_manifest(path: Path) -> ConsumerManifest:
             raise UpdateError("manifest contains duplicate gameVersion: {}".format(value))
         seen_versions.add(value)
 
-    def parse_kind_map(value: object, field: str) -> Dict[str, str]:
-        if not isinstance(value, dict):
-            raise UpdateError("manifest {} must be an object".format(field))
-        result: Dict[str, str] = {}
-        for symbol, kind in value.items():
-            if not isinstance(symbol, str) or not symbol:
-                raise UpdateError("manifest {} contains an invalid symbol name".format(field))
-            if kind not in KIND_LITERALS:
-                raise UpdateError(
-                    "manifest {} entry '{}' has an unsupported kind: {!r}".format(
-                        field, symbol, kind
-                    )
-                )
-            result[symbol] = kind
-        return result
-
-    symbols = parse_kind_map(document.get("symbols"), "symbols")
+    symbols = _flatten_module_symbols(document.get("symbols"), "symbols")
     if not symbols:
         raise UpdateError("manifest symbols must not be empty")
 
     optional_value = document.get("optionalSymbols", {})
     if isinstance(optional_value, list):
         # Accept a bare list of names for present-only symbols of any kind.
-        optional_symbols = {}
+        optional_symbols: Dict[str, Dict[str, str]] = {"engine": {}}
         for symbol in optional_value:
             if not isinstance(symbol, str) or not symbol:
                 raise UpdateError("manifest optionalSymbols contains an invalid symbol name")
-            optional_symbols[symbol] = None  # type: ignore[assignment]
+            optional_symbols["engine"][symbol] = ""
     else:
-        optional_symbols = parse_kind_map(optional_value, "optionalSymbols")
-        optional_symbols = dict(optional_symbols)
+        optional_symbols = _flatten_module_symbols(optional_value, "optionalSymbols")
 
-    raw_patch_sets = document.get("numberedPatchSets", [])
-    if not isinstance(raw_patch_sets, list):
-        raise UpdateError("manifest numberedPatchSets must be an array")
-    patch_sets: List[str] = []
-    for prefix in raw_patch_sets:
-        if not isinstance(prefix, str) or not prefix:
-            raise UpdateError("manifest numberedPatchSets contains an invalid prefix")
-        patch_sets.append(prefix)
+    patch_sets = _parse_numbered_sets(document.get("numberedPatchSets", []))
 
     raw_strip_payload = document.get("stripPayloadFields", {})
     if not isinstance(raw_strip_payload, dict):
@@ -343,47 +413,98 @@ def load_manifest(path: Path) -> ConsumerManifest:
             )
         alternative_groups.append(tuple(group))
 
+    raw_conditional = document.get("conditionalGroups", [])
+    if not isinstance(raw_conditional, list):
+        raise UpdateError("manifest conditionalGroups must be an array")
+    conditional_groups: List[ConditionalGroup] = []
+    for index, group in enumerate(raw_conditional):
+        field = "conditionalGroups[{}]".format(index)
+        if not isinstance(group, dict):
+            raise UpdateError("manifest {} must be an object".format(field))
+        when = require_string_list(group.get("when"), "{} when".format(field))
+        for value in when:
+            if not GAME_VERSION_PATTERN.fullmatch(value):
+                raise UpdateError("manifest {} contains an invalid gameVersion: {!r}".format(field, value))
+        exempt = require_string_list(group.get("exempt"), "{} exempt".format(field))
+        for value in exempt:
+            if not GAME_VERSION_PATTERN.fullmatch(value):
+                raise UpdateError("manifest {} contains an invalid gameVersion: {!r}".format(field, value))
+        symbols_map = _flatten_module_symbols(group.get("symbols"), "{} symbols".format(field))
+        if not symbols_map:
+            raise UpdateError("manifest {} symbols must not be empty".format(field))
+        conditional_groups.append(
+            ConditionalGroup(
+                when=when,
+                exempt=exempt,
+                symbols=symbols_map,
+                numbered_prefixes=require_string_list(
+                    group.get("numberedPatchSets"), "{} numberedPatchSets".format(field)
+                ),
+            )
+        )
+
     return ConsumerManifest(
         name=name,
         index_url=index_url,
         game_versions=tuple(game_versions),
         symbols=symbols,
-        optional_symbols=optional_symbols,  # type: ignore[arg-type]
-        numbered_patch_sets=tuple(patch_sets),
+        optional_symbols=optional_symbols,
+        numbered_patch_sets=patch_sets,
         strip_payload_fields=strip_payload,
         strip_record_fields=require_string_list(document.get("stripRecordFields"), "stripRecordFields"),
         strip_top_level_fields=require_string_list(document.get("stripTopLevelFields"), "stripTopLevelFields"),
         symbol_exemptions=symbol_exemptions,
         alternative_groups=tuple(alternative_groups),
+        conditional_groups=tuple(conditional_groups),
     )
 
 
-def manifest_keep_set(manifest: ConsumerManifest, records: List[object]) -> Set[str]:
-    """Resolve the exact set of symbol names to keep for one snapshot.
+def manifest_keep_set(manifest: ConsumerManifest, records: List[object], game_version: str) -> Set[Tuple[str, str]]:
+    """Resolve the exact set of (module, symbolName) keys to keep for one
+    snapshot.
 
     Required symbols are always kept (absent ones are handled by the release
     validator, not here). Optional symbols are kept only when present. A
     numbered patch set is kept as a contiguous run starting at `_0`; the run
-    ends at the first missing index, matching the launcher's enumeration.
+    ends at the first missing index, matching the consumer's enumeration.
+    Conditional groups add (module, symbol) pairs for the gameVersions they
+    apply to. Symbols with no module are treated as belonging to "engine".
     """
-    present_names = {
-        record.get("symbolName")
+    present: Set[Tuple[str, str]] = {
+        (record.get("module", "engine"), record.get("symbolName"))
         for record in records
         if isinstance(record, dict)
     }
+    present_names = {name for _, name in present}
 
-    keep: Set[str] = set()
-    for symbol in manifest.symbols:
-        keep.add(symbol)
-    for symbol in manifest.optional_symbols:
-        if symbol in present_names:
-            keep.add(symbol)
+    keep: Set[Tuple[str, str]] = set()
 
-    for prefix in manifest.numbered_patch_sets:
+    for module, symbol_map in manifest.symbols.items():
+        for symbol in symbol_map:
+            keep.add((module, symbol))
+    for module, symbol_map in manifest.optional_symbols.items():
+        for symbol in symbol_map:
+            if symbol in present_names:
+                keep.add((module, symbol))
+    for module, prefix in manifest.numbered_patch_sets:
         index = 0
-        while "{}_{}".format(prefix, index) in present_names:
-            keep.add("{}_{}".format(prefix, index))
+        while (module, "{}_{}".format(prefix, index)) in present:
+            keep.add((module, "{}_{}".format(prefix, index)))
             index += 1
+
+    for group in manifest.conditional_groups:
+        if game_version in group.exempt:
+            continue
+        if group.when and game_version not in group.when:
+            continue
+        for module, symbol_map in group.symbols.items():
+            for symbol in symbol_map:
+                keep.add((module, symbol))
+        for prefix in group.numbered_prefixes:
+            index = 0
+            while ("engine", "{}_{}".format(prefix, index)) in present:
+                keep.add(("engine", "{}_{}".format(prefix, index)))
+                index += 1
 
     return keep
 
@@ -969,10 +1090,18 @@ def download_snapshot(
 
 def validate_target_path(target_dir: Path) -> Path:
     absolute_target = Path(os.path.abspath(str(target_dir)))
-    if (
-        absolute_target.name.lower() != "gamedata"
-        or absolute_target.parent.name.lower() != "metahook"
-    ):
+    # Accept the launcher's own catalog (<...>/metahook/gamedata) and a plugin
+    # catalog nested under it (<...>/metahook/gamedata/<plugin>). Any other
+    # location is refused so the synchronizer cannot publish somewhere unexpected.
+    is_launcher_catalog = (
+        absolute_target.name.lower() == "gamedata"
+        and absolute_target.parent.name.lower() == "metahook"
+    )
+    is_nested_plugin_catalog = (
+        absolute_target.parent.name.lower() == "gamedata"
+        and absolute_target.parent.parent.name.lower() == "metahook"
+    )
+    if not (is_launcher_catalog or is_nested_plugin_catalog):
         raise UpdateError(
             "refusing to update unexpected target directory: {}".format(absolute_target)
         )
@@ -1213,7 +1342,7 @@ def validate_manifest_coverage(target_dir: Path, manifest: ConsumerManifest) -> 
         records = document.get("records")
         if not isinstance(records, list):
             raise UpdateError("snapshot {} records is not an array".format(game_version))
-        present = {
+        present_names = {
             record.get("symbolName")
             for record in records
             if isinstance(record, dict)
@@ -1223,20 +1352,31 @@ def validate_manifest_coverage(target_dir: Path, manifest: ConsumerManifest) -> 
         # numbered callsite patch set).
         satisfied_by_group: Set[str] = set()
         for group in manifest.alternative_groups:
-            if any(member in present for member in group):
+            if any(member in present_names for member in group):
                 satisfied_by_group.update(group)
+
+        required_names: Set[str] = set()
+        for symbol_map in manifest.symbols.values():
+            required_names.update(symbol_map)
+        for group in manifest.conditional_groups:
+            if game_version in group.exempt:
+                continue
+            if group.when and game_version not in group.when:
+                continue
+            for symbol_map in group.symbols.values():
+                required_names.update(symbol_map)
 
         absent = [
             symbol
-            for symbol in manifest.symbols
-            if symbol not in present
+            for symbol in required_names
+            if symbol not in present_names
             and symbol not in satisfied_by_group
             and game_version not in manifest.symbol_exemptions.get(symbol, ())
         ]
         if absent:
             raise UpdateError(
                 "snapshot {} is missing required symbol(s): {}".format(
-                    game_version, ", ".join(absent)
+                    game_version, ", ".join(sorted(absent))
                 )
             )
 
@@ -1281,21 +1421,22 @@ def prune_record(record: object, manifest: ConsumerManifest) -> Optional[dict]:
     return pruned
 
 
-def prune_snapshot(document: dict, manifest: ConsumerManifest) -> dict:
+def prune_snapshot(document: dict, manifest: ConsumerManifest, game_version: str) -> dict:
     if document.get("schemaVersion") != SUPPORTED_SNAPSHOT_SCHEMA_VERSION:
         raise UpdateError("snapshot schemaVersion is unsupported for pruning")
     records = document.get("records")
     if not isinstance(records, list):
         raise UpdateError("snapshot records is not an array")
 
-    keep_set = manifest_keep_set(manifest, records)
+    keep_set = manifest_keep_set(manifest, records, game_version)
 
     kept_records = []
     used_modules = set()
     for record in records:
         if not isinstance(record, dict):
             continue
-        if record.get("symbolName") not in keep_set:
+        key = (record.get("module", "engine"), record.get("symbolName"))
+        if key not in keep_set:
             continue
         pruned = prune_record(record, manifest)
         if pruned is None:
@@ -1427,7 +1568,7 @@ def update_game_data(
             if not isinstance(document, dict):
                 raise UpdateError("snapshot {} root is not an object".format(entry.game_version))
 
-            pruned = prune_snapshot(document, manifest)
+            pruned = prune_snapshot(document, manifest, entry.game_version)
             pruned_bytes = serialize_pruned(pruned)
             file_name = "{}.json".format(entry.game_version)
             (stage_dir / file_name).write_bytes(pruned_bytes)

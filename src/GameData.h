@@ -21,9 +21,11 @@ namespace GameData
 	// leaves the catalog unavailable. Every other root is merged on a
 	// best-effort basis and cannot fail the whole catalog. Per-snapshot failures
 	// (missing file, size/hash mismatch, bad schema, malformed records) are
-	// isolated and recorded as internal diagnostics. A gameVersion declared by
-	// more than one index keeps the first declaration; a differing re-declaration
-	// is reported as a diagnostic and ignored.
+	// isolated and recorded as internal diagnostics. A gameVersion may be
+	// declared by several indexes (for example the launcher catalog plus a plugin
+	// catalog); every distinct (url, sha256) declaration is loaded, so their
+	// symbols form a union keyed by (moduleCRC64, symbolName). Only a
+	// byte-identical re-declaration of the same file is skipped.
 	bool Initialize(const char* const* gamedataRoots, size_t gamedataRootCount);
 
 	// Return all catalog diagnostics joined with newlines for error reporting.

@@ -81,11 +81,11 @@ namespace
 		std::unordered_map<std::string, std::unique_ptr<GameSymbolRecord>> symbols;
 	};
 
-	// One snapshot entry declared by an index.json. Tracked so that a
-	// gameVersion declared by more than one index (the primary catalog plus
-	// nested catalogs) can be detected: the first declaration wins, an
-	// identical re-declaration is dropped silently, a differing one is reported
-	// as a conflict.
+	// One snapshot entry declared by an index.json. Multiple indexes may declare
+	// the same gameVersion (the launcher's own catalog plus per-plugin catalogs
+	// in nested gamedata roots). Each distinct (url, sha256) is loaded and its
+	// symbols are merged into the catalog union; only a byte-identical
+	// re-declaration (same url and sha256) is dropped as a true duplicate.
 	struct SnapshotDeclaration
 	{
 		std::string root;
@@ -97,7 +97,7 @@ namespace
 	{
 		bool available = false;
 		std::unordered_map<uint64_t, std::unique_ptr<ModuleCatalog>> modules;
-		std::unordered_map<std::string, SnapshotDeclaration> snapshotDeclarations;
+		std::unordered_map<std::string, std::vector<SnapshotDeclaration>> snapshotDeclarations;
 		std::vector<std::string> diagnostics;
 	};
 
@@ -1309,9 +1309,10 @@ namespace
 	// Parse and load one <indexDir>\index.json. Returns true when the index is
 	// present and structurally valid; its snapshots are then merged into the
 	// shared catalog (per-snapshot failures are isolated as diagnostics). A
-	// gameVersion already declared by an earlier index is deduplicated: an
-	// identical declaration is dropped silently, a differing one is reported as
-	// a conflict and the first declaration is kept.
+	// gameVersion may be declared by several indexes (for example the launcher
+	// catalog plus a plugin catalog); every distinct (url, sha256) declaration is
+	// loaded so their symbols form a union. Only a byte-identical re-declaration
+	// of the same file is skipped.
 	bool LoadIndexDir(const std::string& indexDir)
 	{
 		std::string indexPath = JoinPath(indexDir, "index.json");
@@ -1364,19 +1365,20 @@ namespace
 			std::string url = urlValue->GetString();
 			std::string sha256 = sha256Value->GetString();
 
-			auto it = g_catalog.snapshotDeclarations.find(gameVersion);
-			if (it != g_catalog.snapshotDeclarations.end())
+			auto& declarations = g_catalog.snapshotDeclarations[gameVersion];
+			bool duplicate = false;
+			for (const auto& declaration : declarations)
 			{
-				const SnapshotDeclaration& first = it->second;
-				if (first.url != url || first.sha256 != sha256)
+				if (declaration.url == url && declaration.sha256 == sha256)
 				{
-					AddDiagnostic("gameVersion '%s' is declared by both '%s' and '%s' with differing url/sha256; keeping the first",
-						gameVersion.c_str(), first.root.c_str(), indexDir.c_str());
+					duplicate = true;
+					break;
 				}
-				continue;
 			}
+			if (duplicate)
+				continue;
 
-			g_catalog.snapshotDeclarations.emplace(gameVersion, SnapshotDeclaration{ indexDir, url, sha256 });
+			declarations.push_back(SnapshotDeclaration{ indexDir, url, sha256 });
 			LoadSnapshot(indexDir, v);
 		}
 

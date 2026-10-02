@@ -1279,7 +1279,11 @@ def validate_renderer(symbols, game_version, include_engine=True, include_client
 
 def load_manifest(path):
     """Load a consumer manifest (see scripts/manifests/). Returns a dict with the
-    fields this validator needs; schema is shared with scripts/sync-gamedata.py."""
+    fields this validator needs; schema is shared with scripts/sync-gamedata.py.
+
+    Symbol blocks accept either the flat form ({name: kind}, module "engine") or
+    the module-scoped form ({module: {name: kind}}). A null kind means
+    present-only (any kind)."""
     try:
         with open(path, "r", encoding="utf-8") as f:
             document = json.load(f)
@@ -1289,37 +1293,158 @@ def load_manifest(path):
     if not isinstance(document, dict) or document.get("schemaVersion") != 1:
         fail("manifest schemaVersion must be 1")
         return None
-    symbols = document.get("symbols")
-    if not isinstance(symbols, dict) or not symbols:
+
+    kinds = {"function", "global", "patch", "scalar", "structMember",
+             "virtualFunction", "vtable"}
+
+    def parse_kind_map(value, field):
+        if not isinstance(value, dict):
+            fail(f"manifest {field} must be an object")
+            return None
+        result = {}
+        for symbol, kind in value.items():
+            if not isinstance(symbol, str) or not symbol:
+                fail(f"manifest {field} contains an invalid symbol name")
+                return None
+            if kind is None:
+                result[symbol] = None
+                continue
+            if kind not in kinds:
+                fail(f"manifest {field} entry '{symbol}' has an unsupported kind: {kind!r}")
+                return None
+            result[symbol] = kind
+        return result
+
+    def parse_module_symbols(value, field, allow_list=False):
+        if value is None:
+            return {}
+        if allow_list and isinstance(value, list):
+            names = {}
+            for symbol in value:
+                if not isinstance(symbol, str) or not symbol:
+                    fail(f"manifest {field} contains an invalid symbol name")
+                    return None
+                names[symbol] = None
+            return {"engine": names}
+        if not isinstance(value, dict):
+            fail(f"manifest {field} must be an object")
+            return None
+        if value and all(isinstance(v, (dict, list)) for v in value.values()):
+            result = {}
+            for module, mapping in value.items():
+                if isinstance(mapping, list):
+                    names = {}
+                    for symbol in mapping:
+                        if not isinstance(symbol, str) or not symbol:
+                            fail(f"manifest {field}['{module}'] contains an invalid symbol name")
+                            return None
+                        names[symbol] = None
+                    result[module] = names
+                    continue
+                parsed = parse_kind_map(mapping, f"{field}['{module}']")
+                if parsed is None:
+                    return None
+                result[module] = parsed
+            return result
+        flat = parse_kind_map(value, field)
+        if flat is None:
+            return None
+        return {"engine": flat}
+
+    symbols = parse_module_symbols(document.get("symbols"), "symbols")
+    if not symbols:
         fail("manifest symbols must be a non-empty object")
         return None
-    optional = document.get("optionalSymbols", {})
-    if isinstance(optional, list):
-        optional = {name: None for name in optional}
-    if not isinstance(optional, dict):
-        fail("manifest optionalSymbols must be an object or array")
+    optional = parse_module_symbols(document.get("optionalSymbols", {}), "optionalSymbols", allow_list=True)
+
+    def parse_numbered(value):
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            fail("manifest numberedPatchSets must be an array")
+            return None
+        result = []
+        for item in value:
+            if isinstance(item, str) and item:
+                result.append(("engine", item))
+            elif isinstance(item, dict) and isinstance(item.get("prefix"), str) and item["prefix"]:
+                result.append((item.get("module", "engine"), item["prefix"]))
+            else:
+                fail("manifest numberedPatchSets entry is invalid")
+                return None
+        return result
+
+    numbered = parse_numbered(document.get("numberedPatchSets", []))
+    if numbered is None:
         return None
+
     alternatives = document.get("alternativeGroups", [])
     if not isinstance(alternatives, list) or not all(
         isinstance(g, list) and len(g) >= 2 for g in alternatives
     ):
         fail("manifest alternativeGroups must be an array of >=2-element arrays")
         return None
+
+    conditional = []
+    raw_conditional = document.get("conditionalGroups", [])
+    if not isinstance(raw_conditional, list):
+        fail("manifest conditionalGroups must be an array")
+        return None
+    for index, group in enumerate(raw_conditional):
+        if not isinstance(group, dict):
+            fail(f"manifest conditionalGroups[{index}] must be an object")
+            return None
+        group_symbols = parse_module_symbols(group.get("symbols"), f"conditionalGroups[{index}].symbols")
+        if not group_symbols:
+            fail(f"manifest conditionalGroups[{index}].symbols must not be empty")
+            return None
+        group_numbered = parse_numbered(group.get("numberedPatchSets", []))
+        if group_numbered is None:
+            return None
+        conditional.append({
+            "when": group.get("when", []),
+            "exempt": group.get("exempt", []),
+            "symbols": group_symbols,
+            "numberedPatchSets": group_numbered,
+        })
+
     return {
         "name": document.get("name", ""),
         "gameVersions": document.get("gameVersions", []),
         "symbols": symbols,
         "optionalSymbols": optional,
-        "numberedPatchSets": document.get("numberedPatchSets", []),
+        "numberedPatchSets": numbered,
         "symbolExemptions": document.get("symbolExemptions", {}),
         "alternativeGroups": [tuple(g) for g in alternatives],
+        "conditionalGroups": conditional,
     }
+
+
+def _check_symbol_map(symbols, gv, name, module, symbol_map, errors, required, skip=frozenset(), exemptions=None):
+    """Validate one module's {symbol: kind} map against the loaded
+    (module, name) records. required=False skips missing symbols (present-only).
+    `skip` holds symbols satisfied by an alternative group; `exemptions` maps a
+    symbol to gameVersions where it is deliberately absent."""
+    exemptions = exemptions or {}
+    for symbol, expected_kind in symbol_map.items():
+        if required and (symbol in skip or gv in exemptions.get(symbol, ())):
+            continue
+        records = symbols.get((module, symbol))
+        if not isinstance(records, dict):
+            if required:
+                errors.append(f"'{gv}': manifest '{name}': missing required symbol '{symbol}'")
+            continue
+        if expected_kind is not None and records.get("kind") != expected_kind:
+            label = "required" if required else "optional"
+            errors.append(
+                f"'{gv}': manifest '{name}': {label} '{symbol}' must be a {expected_kind} record"
+            )
 
 
 def validate_manifest_coverage(manifest, game_symbols):
     """Check that every version carries the manifest's required symbols with the
-    expected kind, that optional symbols have the right kind when present, and
-    that numbered patch sets are contiguous from 0."""
+    expected kind and module, honours conditional groups and exemptions, and has
+    numbered patch sets contiguous from 0."""
     errors = []
     name = manifest["name"]
 
@@ -1337,41 +1462,44 @@ def validate_manifest_coverage(manifest, game_symbols):
             if any(member in by_name for member in group):
                 satisfied_by_group.update(group)
 
-        for symbol, expected_kind in manifest["symbols"].items():
-            if gv in manifest["symbolExemptions"].get(symbol, []):
-                continue
-            if symbol in satisfied_by_group:
-                continue
-            records = by_name.get(symbol)
-            if not records:
-                errors.append(f"'{gv}': manifest '{name}': missing required symbol '{symbol}'")
-                continue
-            if all(rec.get("kind") != expected_kind for rec in records):
-                errors.append(
-                    f"'{gv}': manifest '{name}': '{symbol}' must be a {expected_kind} record"
-                )
+        for module, symbol_map in manifest["symbols"].items():
+            _check_symbol_map(symbols, gv, name, module, symbol_map, errors,
+                              required=True, skip=satisfied_by_group,
+                              exemptions=manifest["symbolExemptions"])
+        for module, symbol_map in manifest["optionalSymbols"].items():
+            _check_symbol_map(symbols, gv, name, module, symbol_map, errors, required=False)
 
-        for symbol, expected_kind in manifest["optionalSymbols"].items():
-            records = by_name.get(symbol)
-            if not records or expected_kind is None:
+        # Conditional groups apply when their `when` matches (or is empty) and
+        # the gameVersion is not exempt.
+        for group in manifest["conditionalGroups"]:
+            if gv in group["exempt"]:
                 continue
-            if all(rec.get("kind") != expected_kind for rec in records):
-                errors.append(
-                    f"'{gv}': manifest '{name}': optional '{symbol}' must be a {expected_kind} record"
-                )
+            if group["when"] and gv not in group["when"]:
+                continue
+            for module, symbol_map in group["symbols"].items():
+                for symbol, expected_kind in symbol_map.items():
+                    rec = symbols.get((module, symbol))
+                    if not isinstance(rec, dict):
+                        if symbol in satisfied_by_group:
+                            continue
+                        errors.append(f"'{gv}': manifest '{name}': missing conditional symbol '{symbol}' ({module})")
+                    elif expected_kind is not None and rec.get("kind") != expected_kind:
+                        errors.append(f"'{gv}': manifest '{name}': '{symbol}' must be a {expected_kind} record")
 
-        for prefix in manifest["numberedPatchSets"]:
+        # Required (unconditional) numbered sets, plus any inside an active group.
+        numbered_sets = list(manifest["numberedPatchSets"])
+        for group in manifest["conditionalGroups"]:
+            if gv in group["exempt"]:
+                continue
+            if group["when"] and gv not in group["when"]:
+                continue
+            numbered_sets.extend(group["numberedPatchSets"])
+        for module, prefix in numbered_sets:
             first = f"{prefix}_0"
             if first in satisfied_by_group:
                 continue
-            if first not in by_name:
-                errors.append(f"'{gv}': manifest '{name}': missing '{first}'")
-                continue
-            index = 0
-            while f"{prefix}_{index}" in by_name:
-                index += 1
-            # contiguity holds by construction; a gap ends the run silently,
-            # matching the launcher's enumeration which stops at first missing.
+            if (module, first) not in symbols:
+                errors.append(f"'{gv}': manifest '{name}': missing '{first}' ({module})")
 
     return errors
 

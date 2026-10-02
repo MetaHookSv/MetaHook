@@ -26,7 +26,7 @@ GameData 是 launcher 与插件共享的本地符号 catalog，从 `<game>/<mod>
 - `src/metahook.cpp`：初始化 catalog、注册 PE/blob/mirror 身份，按数据决定引擎类型并解析本体所需地址。
 - `src/LoadDllNotification.cpp`：加载/卸载事件触发模块身份失效，传递 loader-critical-region 状态。
 - `scripts/sync-gamedata.py`：读取 manifest，HTTPS index 下载、原始快照持久缓存、按 manifest 裁剪（symbols + 字段）、稳定命名发布；`--validate-only` 离线校验并核对 manifest 覆盖。
-- `scripts/manifests/metahook.json`：launcher 的 manifest（支持的 gameVersions、必需/可选 symbols、编号 patch set、替代组、字段裁剪表）。插件可提供同 schema 的 manifest 复用同步器。
+- `scripts/manifests/metahook.json`：launcher 的 manifest（支持的 gameVersions、必需/可选 symbols、编号 patch set、替代组、条件组、字段裁剪表）。symbols 支持按 module 分组（`{engine:{名:kind},client:{...}}`）与条件组 `conditionalGroups`（按 gameVersion 应用）。插件可提供同 schema 的 manifest 复用同步器，并发布到嵌套的 `<mod>/metahook/gamedata/<plugin>/`（launcher 会与其 catalog 取并集）。
 - `scripts/validate-gamedata.py`：manifest 模式的发布门禁（`--manifest`）；`--full-catalog` 保留外部插件完整消费者门禁，需完整上游 catalog。
 - `CMakeLists.txt`：构建前同步目标、配置选项和安装路径；RapidJSON 与 Chocobo1Hash 由固定 submodule 提供。
 
@@ -43,7 +43,7 @@ GameData 是 launcher 与插件共享的本地符号 catalog，从 `<game>/<mod>
 
 1. `GameData::Initialize(const char* const* gamedataRoots, size_t gamedataRootCount)` 接收一组 gamedata 根目录：`gamedataRoots[0]` 为主根，其 index.json 缺失/非法直接返回 false；其余根按尽力合并。metahook.cpp 的 `MH_LoadEngine_CollectGamedataRoot` 负责递归发现 `gamedata/**/index.json`（主根恒为首项，子目录按名排序、深度优先，跳过 reparse point）。
 2. 每个根读取自己的 `<root>/index.json` 并校验 index schema 4；随后按该根目录解析 snapshot url，校验路径安全、大小和 SHA-256，只提取 Windows records。snapshot 校验 snapshot dataset schema 5、source snapshot contract 8、analysis contract 3。单个 snapshot 失败记入 diagnostics，不破坏其余 catalog。
-3. 将记录规范化为 `GameSymbolRecord`，按 CRC64 和大小写敏感的 symbolName 建表；完全一致的重复记录去重，内容不同返回 `CATALOG_CONFLICT`。多个 index 声明同一 gameVersion 时保留首个；url/sha256 不同的重复声明记为冲突诊断并忽略后者。
+3. 将记录规范化为 `GameSymbolRecord`，按 CRC64 和大小写敏感的 symbolName 建表；完全一致的重复记录去重，内容不同返回 `CATALOG_CONFLICT`。多个 index 声明同一 gameVersion 时**取并集**：每个不同的 (url, sha256) 声明都会被加载，其符号并入同一张表；只有 url+sha256 完全相同的声明才作为重复跳过。这是插件自带 catalog（如 `metahook/gamedata/renderer/`）能与 launcher catalog 合并的前提。
 4. catalog 冻结后不重载；返回的签名文本、bytes、mask、legacyPattern 指针有效至进程退出。
 5. 按 `moduleBase` 管理 PE/blob/None 来源。`RegisterModuleFileSource` 注册 blob 原始文件，`RegisterMirrorAlias` 关联镜像与真实模块。
 
