@@ -4,7 +4,7 @@
 #include <IVideoMode.h>
 
 #include <detours.h>
-#include <capstone.h>
+#include <capstone/capstone.h>
 #include <LoadDllMemoryApi.h>
 
 #include <fstream>

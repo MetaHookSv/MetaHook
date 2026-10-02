@@ -23,6 +23,9 @@ foreach(option BUILD_SHARED BUILD_TESTS BUILD_CSTOOL INSTALL BUILD_DIET)
     set(CAPSTONE_${option} OFF CACHE BOOL "" FORCE)
 endforeach()
 add_subdirectory(thirdparty/capstone_fork EXCLUDE_FROM_ALL)
+# This Capstone version does not publish its public include directory.
+target_include_directories(capstone-static INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/capstone_fork/include")
 add_subdirectory(thirdparty/MemoryModulePP EXCLUDE_FROM_ALL)
 if(METAHOOK_BUILD_SDL)
     include(cmake/SDL.cmake)
@@ -48,8 +51,8 @@ target_compile_features(MetaHook PRIVATE cxx_std_20)
 target_include_directories(MetaHook PRIVATE
     include include/Interface include/HLSDK/common include/HLSDK/cl_dll
     include/HLSDK/engine include/HLSDK/pm_shared include/HLSDK/public
-    thirdparty/Detours_fork/src thirdparty/capstone_fork/include/capstone
-    thirdparty/rapidjson/include thirdparty/rapidjson/include/rapidjson
+    thirdparty/Detours_fork/src
+    thirdparty/rapidjson/include
     thirdparty/Chocobo1Hash/src
 )
 target_compile_definitions(MetaHook PRIVATE WIN32 _WINDOWS _MBCS
