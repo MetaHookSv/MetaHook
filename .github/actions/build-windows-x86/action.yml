@@ -3,7 +3,7 @@ description: Build, validate and package the MetaHook install tree.
 
 outputs:
   archive-path:
-    description: Absolute path to the Windows x86 ZIP archive.
+    description: Absolute path to the Windows x86 7z archive.
     value: ${{ steps.package.outputs.archive-path }}
   timestamp:
     description: UTC timestamp for the build artifact name.
@@ -23,10 +23,14 @@ runs:
     - name: Package install tree
       id: package
       shell: pwsh
+      working-directory: install/x86/Release
       run: |
         $archiveDirectory = Join-Path $env:GITHUB_WORKSPACE 'build/artifacts'
         New-Item -ItemType Directory -Path $archiveDirectory -Force | Out-Null
-        $archivePath = Join-Path $archiveDirectory 'MetaHook-windows-x86.zip'
-        Compress-Archive -Path 'install/x86/Release/*' -DestinationPath $archivePath -Force
+        $archivePath = Join-Path $archiveDirectory 'MetaHook-windows-x86.7z'
+        & 7z a -t7z $archivePath '*' -r
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & 7z t $archivePath
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         "archive-path=$archivePath" >> $env:GITHUB_OUTPUT
         "timestamp=$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd-HH-mm-ss'))" >> $env:GITHUB_OUTPUT

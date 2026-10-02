@@ -73,7 +73,8 @@ Inspect source through local FastCtx tools and begin with [[metahook/project-ove
 
 `.github/workflows/livebuild.yml` runs the x86 Release build for `main` pushes,
 pull requests and manual runs, then uploads a timestamped artifact.
-`.github/workflows/msbuild.yml` builds `v*` tag pushes and publishes the ZIP as a
+`.github/workflows/msbuild.yml` builds `v*` tag pushes and publishes the 7z archive as a
 GitHub Release asset. Both use `.github/actions/build-windows-x86/action.yml`
 to call the existing Release script, run the installed manifest-mode gamedata
-gate and package the full install tree as `MetaHook-windows-x86.zip`.
+gate and package the full install tree as `MetaHook-windows-x86.7z`. Packaging
+uses the runner's 7-Zip CLI and runs `7z t` before publishing archive outputs.

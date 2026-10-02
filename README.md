@@ -110,11 +110,12 @@ migration verification record are in `memory/build_and_verification.md`.
   pushes to `main`, pull requests targeting `main`, and manual runs. Download
   the timestamped `MetaHook-*` artifact from the workflow run's summary.
 - [Build](.github/workflows/msbuild.yml) runs when a `v*` tag is pushed and
-  creates a `MetaHook-<tag>` GitHub Release with `MetaHook-windows-x86.zip`.
+  creates a `MetaHook-<tag>` GitHub Release with `MetaHook-windows-x86.7z`.
 
 Both workflows use the Release build script, validate the installed gamedata
 against the launcher manifest, and archive the contents of `install/x86/Release`
-with the launcher, PDB, SDL runtimes, SDK and licenses at the ZIP root.
+with the launcher, PDB, SDL runtimes, SDK and licenses at the archive root.
+Packaging uses 7-Zip and verifies archive integrity before uploading.
 
 Both workflows check out the pinned dependencies recursively. MemoryModulePP's
 initial commit `d3c042a` is published to its configured remote.

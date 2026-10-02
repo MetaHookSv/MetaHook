@@ -112,6 +112,14 @@ disabled, as in the original launcher project. Neither prevented a build.
 - Local install constraint: incremental CMake installation retains obsolete files. Validation of the existing install tree found 21 old content-addressed gamedata files, so packaging verification used a new install prefix under `build/verification/ci-workspace-*`, matching a fresh hosted runner. For release verification use a fresh staging prefix rather than assuming an old install tree is clean.
 - Scope: no GitHub-hosted run, artifact upload, release publication or game startup was performed in this session.
 
+## 7z build archives (2026-10-02)
+
+- Trigger: use `MetaHook-windows-x86.7z` following MetaHookSv's Windows workflow.
+- Constraint: 7-Zip preserves the relative input path in archive entries. Run the package step from `install/x86/Release` with `*` as input so the launcher and runtime files remain at the archive root.
+- Implementation: the shared action uses `7z a -t7z ... * -r`, checks its exit code, then runs `7z t` before emitting outputs. Both callers consume `archive-path`, so live artifacts and tag-release assets use the new format. The Windows 2022 runner includes 7-Zip.
+- Verification: executed the actual package step against a fresh install tree with official 7-Zip 26.03. Creation, integrity testing and extraction exited 0; all 208 extracted file paths and SHA-256 hashes matched the install tree. The archive was 2,406,066 bytes. Both workflows passed actionlint, and `git diff --check` reported no whitespace errors. Logs: `build/verification/ci-7z-package.log` and `ci-7z-extract.log`.
+- Scope: packaging only; no launcher, SDL or gamedata behavior changed. The earlier ZIP verification above records the original workflow implementation.
+
 ## Runtime and verification limitations
 
 - Build success does not validate game startup, plugin loading or gameplay.
