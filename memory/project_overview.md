@@ -27,7 +27,7 @@ MetaHook is the standalone Windows x86 launcher and public API for GoldSrc/SvEng
 - Windows x86, Visual Studio 2022 v143, C++20, CMake 3.21+; Debug and Release use `/MTd` and `/MT` with VC-LTL.
 - `CMakeLists.txt` defines the launcher and static dependencies. `cmake/Dependencies.cmake` initializes missing submodules and downloads/verifies VC-LTL 5.3.1 using the package's helper.
 - Fixed source submodules: Detours, Capstone, RapidJSON, Chocobo1Hash, Musa.Veil, MemoryModulePP, SDL3 and sdl2-compat.
-- MemoryModulePP's initial commit `d3c042a` is local only at migration time; publish it before expecting a remote recursive clone to work.
+- MemoryModulePP's initial commit `d3c042a` was local only at migration time and was published to its configured `origin/main` on 2026-10-02; a fresh shallow clone verified the exact commit.
 - Python 3.8+ runs gamedata synchronization/validation. The launcher target itself does not link Renderer, OpenGL, physics or SDL. The package builds SDL2/SDL3 runtimes and SDK headers through `cmake/SDL.cmake` when `METAHOOK_BUILD_SDL` is ON (default); Renderer consumes those headers externally.
 - Commands: [[metahook/suggested-commands]]. Build internals, dependency pinning and migration verification: [[metahook/build-and-verification]]. User-facing deployment: root `README.md`.
 

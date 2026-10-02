@@ -67,4 +67,13 @@ git diff
 git submodule status
 ```
 
-Inspect source through local FastCtx tools and begin with [[metahook/project-overview]]. Commit/push only when requested. MemoryModulePP's initial local-only submodule commit must be published before a remote recursive checkout is available.
+Inspect source through local FastCtx tools and begin with [[metahook/project-overview]]. Commit/push only when requested. MemoryModulePP's pinned commit is published; see [[metahook/build-and-verification]] for the remote clone verification record.
+
+## GitHub Actions
+
+`.github/workflows/livebuild.yml` runs the x86 Release build for `main` pushes,
+pull requests and manual runs, then uploads a timestamped artifact.
+`.github/workflows/msbuild.yml` builds `v*` tag pushes and publishes the ZIP as a
+GitHub Release asset. Both use `.github/actions/build-windows-x86/action.yml`
+to call the existing Release script, run the installed manifest-mode gamedata
+gate and package the full install tree as `MetaHook-windows-x86.zip`.

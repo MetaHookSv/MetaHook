@@ -1,0 +1,32 @@
+name: Build Windows x86 Release
+description: Build, validate and package the MetaHook install tree.
+
+outputs:
+  archive-path:
+    description: Absolute path to the Windows x86 ZIP archive.
+    value: ${{ steps.package.outputs.archive-path }}
+  timestamp:
+    description: UTC timestamp for the build artifact name.
+    value: ${{ steps.package.outputs.timestamp }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build and install
+      shell: cmd
+      run: call scripts\build-MetaHook-x86-Release.bat
+
+    - name: Validate installed gamedata
+      shell: cmd
+      run: python scripts\validate-gamedata.py install\x86\Release\svencoop\metahook\gamedata --manifest scripts\manifests\metahook.json
+
+    - name: Package install tree
+      id: package
+      shell: pwsh
+      run: |
+        $archiveDirectory = Join-Path $env:GITHUB_WORKSPACE 'build/artifacts'
+        New-Item -ItemType Directory -Path $archiveDirectory -Force | Out-Null
+        $archivePath = Join-Path $archiveDirectory 'MetaHook-windows-x86.zip'
+        Compress-Archive -Path 'install/x86/Release/*' -DestinationPath $archivePath -Force
+        "archive-path=$archivePath" >> $env:GITHUB_OUTPUT
+        "timestamp=$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd-HH-mm-ss'))" >> $env:GITHUB_OUTPUT

@@ -52,9 +52,9 @@ entry point live in the root `README.md`; runnable commands are in
 - MemoryModulePP is a local component repository at `thirdparty/MemoryModulePP`
   (origin `https://github.com/MetaHookSv/MemoryModulePP`), copied unchanged from
   the baseline and given a CMake static-library target. Its initial commit
-  `d3c042a` is local only: **a recursive clone from GitHub cannot obtain it
-  until that commit is published**. No fallback to an unrelated upstream
-  version is performed.
+  `d3c042a` was local only at migration time and was published to the configured
+  remote's `main` branch on 2026-10-02. A fresh shallow clone verified the exact
+  pinned commit. No fallback to an unrelated upstream version is performed.
 - VC-LTL is not a submodule. CMake downloads `VC-LTL-Binary.7z` from the
   official Chuyu-Team/VC-LTL5 `v5.3.1` release and verifies SHA-256
   `7a18799ed3aa84a225610a5447a56bc534c5c98ccb8dec05caba0e3f633431ad`.
@@ -102,6 +102,15 @@ disabled, as in the original launcher project. Neither prevented a build.
 - Implementation: the parent adds the Capstone `include` directory to `capstone-static`'s interface, and `src/metahook.cpp` uses `<capstone/capstone.h>`. Remove the launcher's explicit Capstone path and redundant RapidJSON `include/rapidjson` path; retain RapidJSON `include` for existing `<rapidjson/...>` references. No vendor files are changed.
 - Verification: both normal Debug/Release batch entrypoints build and install with exit 0, including gamedata checks for 21 unchanged snapshots and installation of MetaHook.exe/PDB. Debug retains the known LNK4075 warning. Logs: `build/verification/include-target-<configuration>.log`.
 - Scope: header lookup only; no API or runtime behavior changes, and no game/plugin smoke test. The historical byte-identical source migration record predates this include directive adjustment.
+
+## GitHub Actions and dependency publication (2026-10-02)
+
+- Trigger: add live builds and version-tag releases following BetterSpray's workflow behavior; publish MemoryModulePP with explicit user authorization.
+- Implementation: `livebuild.yml` builds `main` pushes, pull requests and manual runs, then uploads a timestamped artifact. `msbuild.yml` builds `v*` tag pushes and creates a GitHub Release. Both run on `windows-2022` and share `.github/actions/build-windows-x86/action.yml` for the existing x86 Release script, installed manifest-mode gamedata validation and ZIP packaging of the full install tree. LiveBuild has `contents: read`; release publication has `contents: write`.
+- Publication: MemoryModulePP was already committed and clean. `git push --set-upstream origin main` published `d3c042a2645b272aa9ec4b7118092dd989e3afa4`; a new remote shallow clone returned that exact HEAD. The parent's submodule pin did not change.
+- Verification: actionlint 1.7.12 accepted both workflows. The normal Release entrypoint and the composite action's build step exited 0. A fresh install produced 11 snapshots that passed the action's manifest gate; its actual packaging step exited 0. ZIP CRC checks and comparison against the entire install tree verified all 208 files, including the launcher/PDB, SDL DLLs, SDK libraries/headers and gamedata. Logs are under `build/verification/ci-*.log`.
+- Local install constraint: incremental CMake installation retains obsolete files. Validation of the existing install tree found 21 old content-addressed gamedata files, so packaging verification used a new install prefix under `build/verification/ci-workspace-*`, matching a fresh hosted runner. For release verification use a fresh staging prefix rather than assuming an old install tree is clean.
+- Scope: no GitHub-hosted run, artifact upload, release publication or game startup was performed in this session.
 
 ## Runtime and verification limitations
 
