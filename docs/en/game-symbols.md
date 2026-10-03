@@ -1,4 +1,4 @@
-[Back to README](../../README.md) | [中文](../zh-CN/api.md)
+[Back to README](../../README.md) | [中文](../zh-CN/game-symbols.md)
 
 # Game Symbol API (API 109, extended through API 114)
 
@@ -120,4 +120,4 @@ Scalars and struct members use the same `(moduleCRC64, symbolName)` catalog key 
 
 APIs that accept `moduleBase` require the module to remain loaded for the duration of the call. MetaHook invalidates the module CRC cache and any mirror aliases when the module unloads; an address returned by `ResolveGameSymbol` is valid only until that module instance unloads.
 
-For the features added in V4, see [Features](features.md); for ABI compatibility and behavioral changes, see [Compatibility](compatibility.md).
+For the features added in V4, see [Features](metahook-api.md); for ABI compatibility and behavioral changes, see [Compatibility](compatibility.md).

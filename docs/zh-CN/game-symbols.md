@@ -1,4 +1,4 @@
-[返回 README](../../README.md) | [English](../en/api.md)
+[返回 README](../../README.md) | [English](../en/game-symbols.md)
 
 # 游戏符号 API（API 109，扩展至 API 114）
 
@@ -120,4 +120,4 @@ scalar、structMember 与地址型记录共用同一 catalog 与 `(moduleCRC64, 
 
 接受 `moduleBase` 的 API 要求模块在调用期间保持已加载。模块卸载时 MetaHook 会失效其 CRC 缓存及全部 mirror aliases；`ResolveGameSymbol` 返回的地址仅在该模块加载实例卸载前有效。
 
-V4 新增的特性见[功能特性](features.md)；ABI 兼容性与行为变化见[兼容性](compatibility.md)。
+V4 新增的特性见[功能特性](metahook-api.md)；ABI 兼容性与行为变化见[兼容性](compatibility.md)。

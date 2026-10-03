@@ -1,6 +1,6 @@
 [返回 README](../../README.md) | [English](../en/build-instruction.md)
 
-# 快速开始
+# 构建说明
 
 本页涵盖 MetaHook 的构建、安装与依赖细节。
 

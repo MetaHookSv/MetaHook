@@ -1,6 +1,6 @@
 [Back to README](../../README.md) | [中文](../zh-CN/build-instruction.md)
 
-# Getting started
+# Build instruction
 
 This page covers the build, install and dependency details of MetaHook.
 

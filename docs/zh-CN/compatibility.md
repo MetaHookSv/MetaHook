@@ -2,7 +2,7 @@
 
 # 兼容性
 
-本页涵盖与旧版 MetaHook 插件的 ABI 兼容性，以及 MetaHookSv (V4) 相比 MetaHook (V2) 的行为变化。V4 新增的特性见[功能特性](features.md)；由 gamedata 支撑的符号 API 见[游戏符号 API](api.md)。
+本页涵盖与旧版 MetaHook 插件的 ABI 兼容性，以及 MetaHookSv (V4) 相比 MetaHook (V2) 的行为变化。V4 新增的特性见[功能特性](metahook-api.md)；由 gamedata 支撑的符号 API 见[游戏符号 API](game-symbols.md)。
 
 ## ABI兼容性
 

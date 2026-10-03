@@ -2,7 +2,7 @@
 
 # Compatibility
 
-This page covers ABI compatibility with older MetaHook plugins and the behavioral changes introduced by MetaHookSv (V4) compared to MetaHook (V2). For the features added in V4, see [Features](features.md); for the gamedata-backed symbol API, see [Game Symbol API](api.md).
+This page covers ABI compatibility with older MetaHook plugins and the behavioral changes introduced by MetaHookSv (V4) compared to MetaHook (V2). For the features added in V4, see [Features](metahook-api.md); for the gamedata-backed symbol API, see [Game Symbol API](game-symbols.md).
 
 ## ABI Compatibility
 

@@ -1,4 +1,4 @@
-[返回 README](../../README.md) | [English](../en/ci.md)
+[返回 README](../../README.md) | [English](../en/ci-cd.md)
 
 # 自动化构建
 
@@ -9,4 +9,4 @@
 
 两个工作流都会递归检出固定的依赖。MemoryModulePP 的初始提交 `d3c042a` 发布到其配置的远端。
 
-构建、安装与依赖细节见[快速开始](build-instruction.md)。
+构建、安装与依赖细节见[构建说明](build-instruction.md)。

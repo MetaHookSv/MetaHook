@@ -1,4 +1,4 @@
-[Back to README](../../README.md) | [中文](../zh-CN/ci.md)
+[Back to README](../../README.md) | [中文](../zh-CN/ci-cd.md)
 
 # Automated builds
 
@@ -9,4 +9,4 @@ Both workflows use the Release build script and validate the installed gamedata 
 
 Both workflows check out the pinned dependencies recursively. MemoryModulePP's initial commit `d3c042a` is published to its configured remote.
 
-For the build, install and dependency details, see [Getting started](build-instruction.md).
+For the build, install and dependency details, see [Build instruction](build-instruction.md).

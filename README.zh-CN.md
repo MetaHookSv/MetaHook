@@ -21,7 +21,7 @@ MetaHook 是一个用于客户端modding，允许用户为其编写插件的Gold
 
 运行时 MetaHook 需要 32 位 Windows 系统和一个受支持的 GoldSrc 游戏安装。
 
-1. 构建或获取启动器（见[快速开始](docs/zh-CN/build-instruction.md)）。
+1. 构建或获取启动器（见[构建说明](docs/zh-CN/build-instruction.md)）。
 2. 将 `MetaHook.exe` 放到游戏根目录，即原版游戏可执行文件所在的位置。
 3. 把安装树中的 `svencoop/metahook/gamedata` 复制到 `<game>/<mod>/metahook/gamedata`。
 4. SDL 运行时包（`SDL2.dll`、`SDL3.dll`）随启动器一起构建并安装
@@ -34,11 +34,11 @@ MetaHook 是一个用于客户端modding，允许用户为其编写插件的Gold
 
 ## 文档
 
-- [快速开始：构建、安装与依赖](docs/zh-CN/build-instruction.md)
-- [兼容性：ABI 兼容性与行为变化](docs/zh-CN/compatibility.md)
-- [功能特性：引擎探测、hooking、Blob 与 Mirror-DLL API](docs/zh-CN/features.md)
-- [游戏符号 API：由 gamedata 支撑的符号查询与解析](docs/zh-CN/api.md)
-- [自动化构建：CI 工作流与发布归档](docs/zh-CN/ci.md)
+- [构建说明](docs/zh-CN/build-instruction.md)
+- [兼容性](docs/zh-CN/compatibility.md)
+- [MetaHook API](docs/zh-CN/metahook-api.md)
+- [游戏符号 API](docs/zh-CN/game-symbols.md)
+- [自动化构建](docs/zh-CN/ci-cd.md)
 
 英文原文位于 [`docs/en/`](docs/en/compatibility.md)。
 

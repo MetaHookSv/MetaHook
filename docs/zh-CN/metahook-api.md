@@ -1,8 +1,8 @@
-[返回 README](../../README.md) | [English](../en/features.md)
+[返回 README](../../README.md) | [English](../en/metahook-api.md)
 
 # 功能特性
 
-MetaHookSv (V4) 相比 MetaHook (V2) 新增了以下特性。ABI 兼容性与行为变化见[兼容性](compatibility.md)；由 gamedata 支撑的符号 API 见[游戏符号 API](api.md)。
+MetaHookSv (V4) 相比 MetaHook (V2) 新增了以下特性。ABI 兼容性与行为变化见[兼容性](compatibility.md)；由 gamedata 支撑的符号 API 见[游戏符号 API](game-symbols.md)。
 
 ## 自动探测引擎类型
 

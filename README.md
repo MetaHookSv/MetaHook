@@ -26,7 +26,7 @@ users write their own plugins.
 At runtime MetaHook needs a 32-bit Windows system and a supported GoldSrc game
 installation.
 
-1. Build or obtain the launcher (see [Getting started](docs/en/build-instruction.md)).
+1. Build or obtain the launcher (see [Build instruction](docs/en/build-instruction.md)).
 2. Put `MetaHook.exe` in the game's root directory, where the original game
    executable lives.
 3. Copy `svencoop/metahook/gamedata` from the install tree to
@@ -44,11 +44,11 @@ Launching:
 
 ## Documentation
 
-- [Getting started: build, install and dependencies](docs/en/build-instruction.md)
-- [Compatibility: ABI compatibility and behavioral changes](docs/en/compatibility.md)
-- [Features: engine detection, hooking, Blob and Mirror-DLL APIs](docs/en/features.md)
-- [Game Symbol API: gamedata-backed symbol query and resolution](docs/en/api.md)
-- [Automated builds: CI workflows and release archives](docs/en/ci.md)
+- [Build instruction](docs/en/build-instruction.md)
+- [Compatibility](docs/en/compatibility.md)
+- [MetaHook API](docs/en/metahook-api.md)
+- [Game Symbols](docs/en/game-symbols.md)
+- [Automated builds: CI workflows and release archives](docs/en/ci-cd.md)
 
 Chinese translations live under [`docs/zh-CN/`](docs/zh-CN/compatibility.md).
 

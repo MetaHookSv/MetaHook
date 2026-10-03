@@ -1,8 +1,8 @@
-[Back to README](../../README.md) | [中文](../zh-CN/features.md)
+[Back to README](../../README.md) | [中文](../zh-CN/metahook-api.md)
 
 # Features
 
-MetaHookSv (V4) adds the following features over MetaHook (V2). For ABI compatibility and behavioral changes, see [Compatibility](compatibility.md); for the gamedata-backed symbol API, see [Game Symbol API](api.md).
+MetaHookSv (V4) adds the following features over MetaHook (V2). For ABI compatibility and behavioral changes, see [Compatibility](compatibility.md); for the gamedata-backed symbol API, see [Game Symbol API](game-symbols.md).
 
 ## Automatic Engine Type Detection
 
