@@ -1,0 +1,202 @@
+[Back to README](../../README.md) | [中文](../zh-CN/features.md)
+
+# Features
+
+MetaHookSv (V4) adds the following features over MetaHook (V2). For ABI compatibility and behavioral changes, see [Compatibility](compatibility.md); for the gamedata-backed symbol API, see [Game Symbol API](api.md).
+
+## Automatic Engine Type Detection
+
+Automatically identifies four types of engines: SvEngine, GoldSrc_HL25, GoldSrc, and GoldSrc_Blob.
+- SvEngine: A modified GoldSrc branch created by the Sven Co-op team.
+- GoldSrc_HL25: The latest GoldSrc after the "Half-Life 25th Anniversary Update," with an engine build number greater than or equal to 9884.
+- GoldSrc_Blob: An engine with a build number less than 4554, using a non-standard PE format for encryption.
+- GoldSrc: GoldSrc with a build number between 4554 and 8684.
+
+You can use `g_pMetaHookAPI->GetEngineType` or `g_pMetaHookAPI->GetEngineTypeName` to obtain the corresponding engine type.
+
+## API: Reverse Search Function Header
+
+You can use `g_pMetaHookAPI->ReverseSearchFunctionBegin` or `g_pMetaHookAPI->ReverseSearchFunctionBeginEx` to search backward for a function header from a specific address.
+- `g_pMetaHookAPI->ReverseSearchFunctionBegin` will traverse the entire function starting from the current byte using a disassembly engine when it encounters a previous byte of CC, 90, or C3. If it does not return to the previous byte's position during traversal, the current byte will be determined as the function header. This function may fail to retrieve the function header if it encounters an abnormal function ending like E9 (JMP) without padding bytes, where the entire function body is directly connected to the next function body. In such cases, `g_pMetaHookAPI->ReverseSearchFunctionBeginEx` should be used.
+- `g_pMetaHookAPI->ReverseSearchFunctionBeginEx` requires a callback that returns TRUE for a specific pattern to stop the search and confirm the function header.
+
+## API: Disassembly Engine
+
+The disassembly engine uses Capstone 4.0.2.
+- `g_pMetaHookAPI->DisasmSingleInstruction`: Disassembles a single instruction.
+- `g_pMetaHookAPI->DisasmRanges`: Disassembles instructions within a specific range.
+
+## API: Reverse Search Pattern
+
+`g_pMetaHookAPI->ReverseSearchPattern` functions similarly to `g_pMetaHookAPI->SearchPattern`, with the only difference being that it searches backward from pStartSearch instead of downward.
+
+## API: Client Module Operations (client.dll)
+
+- `g_pMetaHookAPI->GetClientModule`: Retrieves the client module. Only non-blob loaded client.dll can obtain an HMODULE; it will return NULL for blob-loaded client.dll.
+- `g_pMetaHookAPI->GetClientBase`: Retrieves the client base address. Supports both non-blob and blob loaded client.dll.
+- `g_pMetaHookAPI->GetClientSize`: Retrieves the size of the client module. Supports both non-blob and blob loaded client.dll.
+- `g_pMetaHookAPI->GetClientFactory`: Retrieves the client interface factory (i.e., `CreateInterface` in `interface.cpp`). Supports both non-blob and blob loaded client.dll.
+
+## API: Request Information from Other Plugins
+
+- `g_pMetaHookAPI->QueryPluginInfo`: Retrieves information about all loaded plugins. The retrieval method is:
+
+```cpp
+mh_plugininfo_t info;
+if(g_pMetaHookAPI->GetPluginInfo("PluginName.dll", &info)) // "PluginName.dll" is case-insensitive
+{
+}
+```
+
+- `g_pMetaHookAPI->GetPluginInfo`: Queries a specific plugin by name, ignoring suffixes like _SSE or _AVX.
+
+```cpp
+mh_plugininfo_t info;
+if(g_pMetaHookAPI->GetPluginInfo("PluginName.dll", &info)) // "PluginName.dll" is case-insensitive
+{
+}
+```
+
+## API: HookUserMsg
+
+- `g_pMetaHookAPI->HookUserMsg`: Similar to the HookUserMsg implementation in some previous plugins, now exported by g_pMetaHookAPI.
+
+## API: HookCvarCallback, RegisterCvarCallback
+
+Cvar callbacks are a feature added by Valve in build number 6153 of the GoldSrc engine, used to execute specific callbacks when a cvar is modified. Valve only uses this feature on `gl_texturemode`.
+- `g_pMetaHookAPI->HookCvarCallback`: Provides the ability to hook a modification callback for a specific cvar.
+- `g_pMetaHookAPI->RegisterCvarCallback`: Provides the ability to register a modification callback for a specific cvar. If HookCvarCallback fails, you can register it yourself (if no one has registered a callback for that cvar, the hook will fail).
+
+## API: HookCmd
+
+- `g_pMetaHookAPI->HookCmd`: Similar to the HookCmd implementation in some previous plugins, now exported by g_pMetaHookAPI.
+
+## API: SysError
+
+- `g_pMetaHookAPI->SysError`: Similar to SysErrorEx in some previous plugins (popup error and exit the game), now exported by g_pMetaHookAPI.
+
+## API: IsDebuggerPresent
+
+- `g_pMetaHookAPI->IsDebuggerPresent`: Checks if a debugger is present.
+
+## API: Blob Module Operations
+
+- `g_pMetaHookAPI->GetBlobEngineModule`: Retrieves the module handle for the Blob format engine. This module handle cannot be mixed with HMODULE and can only be used to operate on Blob modules.
+- `g_pMetaHookAPI->GetBlobClientModule`: Retrieves the module handle for the Blob format client.dll. This module handle cannot be mixed with HMODULE and can only be used to operate on Blob modules.
+- `g_pMetaHookAPI->GetBlobModuleImageBase`: Gets the base address of the module from the Blob module handle.
+- `g_pMetaHookAPI->GetBlobModuleImageSize`: Gets the size of the module from the Blob module handle.
+- `g_pMetaHookAPI->GetBlobSectionByName`: Searches for a specific section in the Blob module corresponding to the Blob module handle. Only supports ".text\0\0\0" and ".data\0\0\0" (as Blob format modules generally only have these two sections holding valid information).
+- `g_pMetaHookAPI->BlobLoaderFindBlobByImageBase`: Queries the Blob handle of the module from the base address of the Blob module.
+- `g_pMetaHookAPI->BlobLoaderFindBlobByVirtualAddress`: Queries the Blob handle of the module from a specific address within the Blob module. As long as the address is within the range of ImageBase to ImageBase + ImageSize of the Blob module, the corresponding Blob module can be queried.
+
+## API: DLL Load Callback Operations
+
+- `g_pMetaHookAPI->RegisterLoadDllNotificationCallback`: Registers a callback for DLL load/unload notifications. Modules loaded/unloaded via LoadLibrary, import table, or Blob methods will execute your registered callback. You can use `(ctx->flags & LOAD_DLL_NOTIFICATION_IS_BLOB)` to determine if it is a Blob load/unload. You can use `(ctx->flags & LOAD_DLL_NOTIFICATION_IS_ENGINE)` to determine if the loaded/unloaded module is the engine. You can use `(ctx->flags & LOAD_DLL_NOTIFICATION_IS_CLIENT)` to determine if the loaded/unloaded module is the client client.dll. You can use `(ctx->flags & LOAD_DLL_NOTIFICATION_IS_LOAD)` to determine if it is a load. You can use `(ctx->flags & LOAD_DLL_NOTIFICATION_IS_UNLOAD)` to determine if it is an unload.
+- `g_pMetaHookAPI->UnregisterLoadDllNotificationCallback`: Allows you to unregister a previously registered DLL load/unload callback. Should be unregistered in `IPlugins::Shutdown`.
+
+## API: Import Table Operations
+
+- `g_pMetaHookAPI->ModuleHasImport`: Queries whether a specific HMODULE module imports a certain DLL.
+- `g_pMetaHookAPI->ModuleHasImportEx`: Queries whether a specific HMODULE module imports a certain function.
+- `g_pMetaHookAPI->BlobHasImport`: Queries whether a specific Blob module imports a certain DLL.
+- `g_pMetaHookAPI->BlobHasImportEx`: Queries whether a specific Blob module imports a certain function.
+- `g_pMetaHookAPI->BlobIATHook`: Similar to `g_pMetaHookAPI->IATHook`, with the only difference being that the first parameter is a Blob module handle instead of HMODULE.
+
+## API: Get Current Game Directory
+
+- `g_pMetaHookAPI->GetGameDirectory()`: Similar to `gEngfuncs.GetGameDirectory()`, but can be called before engine initialization (calling `gEngfuncs.GetGameDirectory()` before engine initialization will only return an empty string).
+
+## API: Virtual Table Hook
+
+- `g_pMetaHookAPI->VFTHookEx`: Similar to `g_pMetaHookAPI->VFTHook`, but does not require providing the object address, allowing direct hooking of a specific table entry when only the virtual table address is available.
+
+## API: Patch Method Redirect Call/Jmp
+
+- `g_pMetaHookAPI->InlinePatchRedirectBranch`: Redirects call/jmp instructions to a new function using a memory patch, affecting only the patched instruction.
+
+## API: Mirror-DLL
+
+Mirror-DLL is a memory module without executable permissions, and loaded without executing DLL entry point, only undergoing relocation fixes. The code segment (.text) and data segment (.rdata, .data) contents of the Mirror-DLL remain consistent with the state of the target DLL when it was first loaded.
+
+Mirror-DLL provides a clean environment for plugins to search for signatures. When a plugin searches for signatures from a Mirror-DLL instead of the original DLL, it will not fail even if the target module has been hooked or patched by other third-party modules (like HLAE).
+
+Since modules loaded in Blob format do not support relocation, Blob Engine and Blob Client do not provide corresponding Mirror-DLL support.
+
+- `g_pMetaHookAPI->GetMirrorEngineBase`: Gets the base address of the engine loaded in Mirror-DLL form. Returns 0 for Blob Engine.
+- `g_pMetaHookAPI->GetMirrorEngineSize`: Gets the size of the engine module loaded in Mirror-DLL form. Returns 0 for Blob Engine.
+- `g_pMetaHookAPI->GetMirrorClientBase`: Gets the base address of the client.dll module loaded in Mirror-DLL form. Returns 0 for Blob Engine.
+- `g_pMetaHookAPI->GetMirrorClientSize`: Gets the size of the client.dll module loaded in Mirror-DLL form. Returns 0 for Blob Engine.
+- `g_pMetaHookAPI->LoadMirrorDLL_Std`: Loads a specific module in Mirror-DLL form. Internally uses fopen to open the DLL file.
+- `g_pMetaHookAPI->LoadMirrorDLL_FileSystem`: Loads a specific module in Mirror-DLL form. Internally uses IFileSystem to open the DLL file.
+- `g_pMetaHookAPI->FreeMirrorDLL`: Releases the module loaded in Mirror-DLL form.
+- `g_pMetaHookAPI->GetMirrorDLLBase`: Obtains the base address of the module loaded in Mirror-DLL form.
+- `g_pMetaHookAPI->GetMirrorDLLSize`: Obtains the size of the module loaded in Mirror-DLL form.
+
+## API: Thread Pool Related Operations
+
+### `g_pMetaHookAPI->GetGlobalThreadPool`
+
+Get the handle of the global thread pool. The global thread pool is created automatically during MetaHook initialization and is suitable for most general asynchronous tasks. Returns a thread pool handle (`ThreadPoolHandle_t`).
+
+### `g_pMetaHookAPI->CreateThreadPool`
+
+Create a new thread pool. Parameters are the minimum and maximum number of threads. Returns a new thread pool handle. Suitable for scenarios that require an independent thread pool.
+
+```cpp
+ThreadPoolHandle_t hPool = g_pMetaHookAPI->CreateThreadPool(2, 8);
+```
+
+### `g_pMetaHookAPI->CreateWorkItem`
+
+Create a work item in the specified thread pool. Parameters are the thread pool handle, callback function, and context pointer. The callback function signature is `bool (*fnThreadWorkItemCallback)(void* ctx)`, returning `true` means the work item will be freed immediately after completion. so you don't have to call DeleteWorkItem on the workitem.
+
+```cpp
+ThreadWorkItemHandle_t hWorkItem = g_pMetaHookAPI->CreateWorkItem(hPool, MyCallback, myContext);
+```
+
+### `g_pMetaHookAPI->QueueWorkItem`
+
+Queue the work item into the thread pool, waiting for a thread in the pool to execute it.
+
+```cpp
+g_pMetaHookAPI->QueueWorkItem(hPool, hWorkItem);
+```
+
+### `g_pMetaHookAPI->WaitForWorkItemToComplete`
+
+Block the current thread until the specified work item is completed.
+
+```cpp
+g_pMetaHookAPI->WaitForWorkItemToComplete(hWorkItem);
+```
+
+### `g_pMetaHookAPI->DeleteThreadPool`
+
+Destroy the specified thread pool and all its resources. Note: The parameter is the thread pool handle. After destruction, the thread pool cannot be used again.
+
+```cpp
+g_pMetaHookAPI->DeleteThreadPool(hPool);
+```
+
+### `g_pMetaHookAPI->DeleteWorkItem`
+
+Destroy the specified work item. Usually called after the work item is completed to free resources.
+
+```cpp
+g_pMetaHookAPI->DeleteWorkItem(hWorkItem);
+```
+
+## Automatic Detection and Loading of SSE / SSE2 / AVX / AVX2 Versions of Plugins
+
+1. The MetaHook launcher will always load the plugins listed in `\(ModDirectory)\metahook\configs\plugins.lst` in order from top to bottom. Lines with a semicolon ";" before the plugin name will be ignored.
+2. When started in debug mode, automatically load (PluginName).dll.
+3. If the file name from step (2) does not exist, and if the AVX2 instruction set is supported, automatically load (PluginName)_AVX2.dll.
+4. If the file names from steps (2) and (3) do not exist, and if the AVX instruction set is supported and step (2) fails, automatically load (PluginName)_AVX.dll.
+5. If the file names from steps (2), (3), and (4) do not exist, and if the SSE2 instruction set is supported and step (3) fails, automatically load (PluginName)_SSE2.dll.
+6. If the file names from steps (2), (3), (4), and (5) do not exist, and if the SSE instruction set is supported and step (4) fails, automatically load (PluginName)_SSE.dll.
+7. If the file names from steps (3), (4), (5), and (6) do not exist, automatically load (PluginName).dll.
+8. If all the above steps fail, a popup will indicate that the plugin failed to load.
+
+## Illegal Virtual Table Hook Check
+
+A new launch parameter `-metahook_check_vfthook` has been added. This parameter will block any illegal calls to `g_pMetaHookAPI->MH_VFTHook`. Some calls to MH_VFTHook that arise from insufficient checks by plugin authors may attempt to hook addresses that exceed the actual virtual table range, potentially causing random crashes in the game. This launch parameter is specifically designed to address such situations and is not typically needed for normal use.
