@@ -119,5 +119,3 @@ typedef struct mh_gamesymbol_s
 Scalars and struct members use the same `(moduleCRC64, symbolName)` catalog key as address records. The two value-query functions return `MH_GAMESYMBOL_KIND_MISMATCH` for another kind; `ResolveGameSymbol` accepts only address-bearing kinds. A catalog built from an unsupported dataset generation (anything other than dataset schema 5 / source snapshot contract 8 / analysis output contract 3) is rejected per snapshot and recorded as a diagnostic.
 
 APIs that accept `moduleBase` require the module to remain loaded for the duration of the call. MetaHook invalidates the module CRC cache and any mirror aliases when the module unloads; an address returned by `ResolveGameSymbol` is valid only until that module instance unloads.
-
-For the features added in V4, see [Features](metahook-api.md); for ABI compatibility and behavioral changes, see [Compatibility](compatibility.md).

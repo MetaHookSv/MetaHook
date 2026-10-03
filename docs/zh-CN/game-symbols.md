@@ -119,5 +119,3 @@ typedef struct mh_gamesymbol_s
 scalar、structMember 与地址型记录共用同一 catalog 与 `(moduleCRC64, symbolName)` identity。两个数值查询接口遇到其它 kind 返回 `MH_GAMESYMBOL_KIND_MISMATCH`；`ResolveGameSymbol` 只接受地址型 kind。由不支持的 dataset 代际（非 dataset schema 5 / source snapshot contract 8 / analysis output contract 3）构建的 snapshot 会被逐个拒绝并记为诊断。
 
 接受 `moduleBase` 的 API 要求模块在调用期间保持已加载。模块卸载时 MetaHook 会失效其 CRC 缓存及全部 mirror aliases；`ResolveGameSymbol` 返回的地址仅在该模块加载实例卸载前有效。
-
-V4 新增的特性见[功能特性](metahook-api.md)；ABI 兼容性与行为变化见[兼容性](compatibility.md)。

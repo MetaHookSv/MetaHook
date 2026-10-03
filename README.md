@@ -48,7 +48,7 @@ Launching:
 - [Compatibility](docs/en/compatibility.md)
 - [MetaHook API](docs/en/metahook-api.md)
 - [Game Symbols](docs/en/game-symbols.md)
-- [Automated builds: CI workflows and release archives](docs/en/ci-cd.md)
+- [CI/CD](docs/en/ci-cd.md)
 
 Chinese translations live under [`docs/zh-CN/`](docs/zh-CN/compatibility.md).
 

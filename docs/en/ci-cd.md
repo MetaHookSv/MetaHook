@@ -8,5 +8,3 @@
 Both workflows use the Release build script and validate the installed gamedata against the launcher manifest. The archive contains `MetaHook.exe`, `MetaHook.pdb`, `SDL2.dll`, `SDL3.dll` at its root and the complete `svencoop/` directory from `install/x86/Release`. Packaging uses 7-Zip and verifies archive integrity before uploading.
 
 Both workflows check out the pinned dependencies recursively. MemoryModulePP's initial commit `d3c042a` is published to its configured remote.
-
-For the build, install and dependency details, see [Build instruction](build-instruction.md).
