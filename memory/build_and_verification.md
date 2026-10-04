@@ -131,6 +131,13 @@ disabled, as in the original launcher project. Neither prevented a build.
 - Hosted verification after this fix: LiveBuild run `37024901218` at `05bfb5e` completed successfully. Artifact `11235166473` is named `MetaHook-windows-x86.7z` (1,675,860 bytes). Downloading its REST archive endpoint returned raw 7z bytes with signature `377abcaf271c`; official 7-Zip integrity testing and extraction exited 0, and all 16 files matched the requested path selection. Download and logs are under `build/verification/ci-runtime-download-37024901218/`.
 - Scope: Actions artifact transport and packaged file selection. Previous artifacts retain their original format and contents.
 
+## Blob launcher in the package (2026-10-04)
+
+- Trigger: `MetaHook_blob.exe` is built and installed beside `MetaHook.exe`, but the 7z package omitted it, so CI artifacts and releases could not run blob engines.
+- Implementation: the shared action's explicit 7z inputs add `MetaHook_blob.exe` and `MetaHook_blob.pdb`; the CI/CD docs list them.
+- Verification: actionlint 1.7.12 accepted both workflows. The x86 Release entrypoint built and installed with exit 0, and the manifest-mode gamedata gate passed (11 snapshots). The action's packaging script, run verbatim from `install/x86/Release` with 7-Zip 24.07, exited 0 including `7z t`; the archive held 18 files (2,280,521 bytes), and every extracted file matched the install tree by SHA-256. Logs: `build/verification/blob-package-*.log`.
+- Scope: packaging only; no hosted run, game startup or blob-engine smoke test was performed.
+
 ## Runtime and verification limitations
 
 - Build success does not validate game startup, plugin loading or gameplay.

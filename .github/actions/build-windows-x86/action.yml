@@ -31,7 +31,7 @@ runs:
         if (Test-Path -LiteralPath $archivePath -PathType Leaf) {
           Remove-Item -LiteralPath $archivePath
         }
-        & 7z a -t7z $archivePath 'MetaHook.exe' 'MetaHook.pdb' 'SDL2.dll' 'SDL3.dll' 'svencoop'
+        & 7z a -t7z $archivePath 'MetaHook.exe' 'MetaHook.pdb' 'MetaHook_blob.exe' 'MetaHook_blob.pdb' 'SDL2.dll' 'SDL3.dll' 'svencoop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         & 7z t $archivePath
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
