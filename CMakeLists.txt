@@ -70,13 +70,13 @@ target_link_options(MetaHook PRIVATE /BASE:0x1400000 /LARGEADDRESSAWARE /INCREME
 set_target_properties(MetaHook PROPERTIES INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 
 option(METAHOOK_SYNC_GAMEDATA "Download and validate gamedata before building" ON)
-set(METAHOOK_GAMEDATA_DIR "${CMAKE_BINARY_DIR}/assets/svencoop/metahook/gamedata" CACHE PATH "Validated gamedata directory")
+set(METAHOOK_GAMEDATA_DIR "${PROJECT_BINARY_DIR}/assets/svencoop/metahook/gamedata" CACHE PATH "Validated gamedata directory")
 if(METAHOOK_SYNC_GAMEDATA)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_custom_target(MetaHookGameData
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/sync-gamedata.py"
             --manifest "${CMAKE_CURRENT_SOURCE_DIR}/scripts/manifests/metahook.json"
-            --target-dir "${METAHOOK_GAMEDATA_DIR}" --temp-root "${CMAKE_BINARY_DIR}/gamedata-sync"
+            --target-dir "${METAHOOK_GAMEDATA_DIR}" --temp-root "${PROJECT_BINARY_DIR}/gamedata-sync"
         COMMENT "Synchronizing and validating MetaHook gamedata"
         VERBATIM
     )
