@@ -88,7 +88,7 @@ API 115 把旧的 `cbSize < sizeof(mh_gamesymbol_t)` 拒绝规则改成版本化
 - `MH_LoadEngine_DetermineEngineType` 按引擎模块 CRC64 → `GetGameVersion` → 前缀/版本阈值分类；`build_number` 保留给既有 API 消费者，不再决定引擎身份。
 - `MH_LoadEngine_ResolveGlobalOperand` 是从发布的 `signatureRva + instructionOffset + operandOffset` 求引用指令操作数的特殊路径，不改变 GLOBAL 直接地址契约。
 - cvar callback 先探测原生 `cvar_hooks`；不存在时解析编号 `Cvar_Set_to_Cvar_DirectSet_callsite_N` PATCH 并转到 managed callback 链表。
-- DLL 通知通过 `InvalidateModule` 使缓存失效。详见 [[metahook/privatevars/metahook-privatevars]]。
+- DLL 通知通过 `InvalidateModule` 使缓存失效。详见 [[metahook/private-symbols]]。
 
 ## 构建、安装与验证边界
 

@@ -16,11 +16,10 @@ This file provides guidance and important rules working with code in this reposi
 
 #### High-level information in this repository (read corresponding notes first)
 
-- Project overview and codebase entry points: `project_overview`
+- Project overview, launcher architecture/lifecycle and codebase entry points: `project_overview`
 - Plugin system and development workflow: `plugin_system`
-- Launcher architecture and lifecycle: `MetaHook`
 - Symbol catalog and public API contracts: `GameData`
-- Engine-private symbol inventory: `privatevars/metahook-privatevars.md`
+- Engine-private symbol inventory: `PrivateSymbols`
 - Build commands, conventions, and verification: `suggested_commands`, `CodeStyles`, `task_completion`
 - Build internals, dependency pinning, migration verification: `build_and_verification`
 

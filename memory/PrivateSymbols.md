@@ -1,7 +1,7 @@
 ---
-title: metahook-privatevars
+title: PrivateSymbols
 type: reference
-permalink: metahook/privatevars/metahook-privatevars
+permalink: metahook/private-symbols
 tags:
 - metahook
 - private-vars
@@ -11,7 +11,7 @@ tags:
 
 # Game-private symbols used by `metahook.cpp`
 
-Migrated from MetaHookSv's corresponding note. The runtime source is unchanged by the standalone CMake migration. Related: [[metahook/meta-hook]], [[metahook/game-data]].
+Migrated from MetaHookSv's corresponding note. The runtime source is unchanged by the standalone CMake migration. Related: [[metahook/project-overview]], [[metahook/game-data]].
 
 This document inventories the unexported private functions, private data slots, and private call sites that `src/metahook.cpp` consumes from the game engine image. Symbol names use the locally held variables in the code; names in parentheses indicate inferred game-side meanings based on use, rather than official debug-symbol names from the upstream binary.
 

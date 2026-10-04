@@ -27,7 +27,7 @@ Migrated from MetaHookSv's `plugin_system` note, retaining the host/plugin contr
 4. Plugins may replace exports such as `pExportFunc->HUD_Init` and use host inline/VFT/IAT/inline-patch capabilities.
 5. Exit/shutdown dispatch and centralized hook cleanup accompany engine-session teardown. DLL callbacks also report load/unload events; callbacks in the Ldr critical region must avoid blocking and unsafe reentrancy.
 
-`MH_LoadPlugin` inserts at the head of a linked list, so `LoadEngine` / `LoadClient` traversal is the reverse of the textual plugin list. Load order therefore matters for dependencies and hooks; see [[metahook/meta-hook]].
+`MH_LoadPlugin` inserts at the head of a linked list, so `LoadEngine` / `LoadClient` traversal is the reverse of the textual plugin list. Load order therefore matters for dependencies and hooks; see [[metahook/project-overview]].
 
 ## Integration conventions
 
@@ -36,4 +36,4 @@ Migrated from MetaHookSv's `plugin_system` note, retaining the host/plugin contr
 - Preserve older interface versions and API slot order. New symbol metadata respects the versioned `cbSize` contract.
 - Build/install success validates the launcher artifact, not plugin loading or gameplay. Deploy the selected plugins, configuration and resources separately before runtime verification.
 
-Related: [[metahook/project-overview]], [[metahook/privatevars/metahook-privatevars]].
+Related: [[metahook/project-overview]], [[metahook/private-symbols]].

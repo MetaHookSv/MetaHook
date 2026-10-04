@@ -28,7 +28,7 @@ cmake --build build/x86/Debug --config Debug --target install --parallel
 
 Replace both `Debug` path components and `--config Debug` with `Release` for Release. The Visual Studio generator selects the build configuration through `--config`.
 
-`install/x86/<configuration>/` contains `MetaHook.exe`, PDB and `svencoop/metahook/gamedata/`. It is not copied to a game directory automatically. There is no standalone `Release_AVX2`, `Release_blob`, plugin or installer target.
+`install/x86/<configuration>/` contains `MetaHook.exe`, `MetaHook_blob.exe`, their PDBs, `SDL2.dll` and `SDL3.dll` (when `METAHOOK_BUILD_SDL` is ON) and `svencoop/metahook/gamedata/`. It is not copied to a game directory automatically. Blob support is the `MetaHook_blob` target built in both configurations; there is no standalone `Release_AVX2`, `Release_blob`, plugin or installer target.
 
 ## Offline and data validation
 
