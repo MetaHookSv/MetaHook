@@ -7,7 +7,7 @@ if(NOT WIN32 OR NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "MetaHook requires Windows MSVC x86. Configure with -A Win32.")
 endif()
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Supported configurations" FORCE)
-option(METAHOOK_BUILD_SDL "Build and install SDL2/SDL3 runtimes and SDK headers" ON)
+option(METAHOOK_BUILD_SDL "Build and install the SDL2/SDL3 runtime DLLs" ON)
 
 include(cmake/Dependencies.cmake)
 metahook_prepare_dependencies()
