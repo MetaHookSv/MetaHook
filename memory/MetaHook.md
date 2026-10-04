@@ -91,7 +91,7 @@ Key source responsibilities:
 - The `_SSE.dll` branch in `MH_LoadPlugins` performs duplicate attempts (the same condition twice).
 - `MH_FreeHooksForModule` is currently `TODO`, although the unload-notification path already calls it; hook reclamation after module unloading is not actually implemented.
 - `LoadDllNotification` dispatches callbacks even inside the `Ldr` critical region; plugin callbacks must avoid blocking or reentrancy-sensitive operations themselves.
-- Blob code is enabled by `METAHOOK_BLOB_SUPPORT` or `_DEBUG`. The current CMake project provides ordinary Debug and Release only: Debug includes the blob branch, Release does not define the blob macro. There is no separate blob executable target.
+- Blob code is compiled only when `METAHOOK_BLOB_SUPPORT` is defined; `_DEBUG` no longer enables it. The CMake project builds two executables in both Debug and Release: `MetaHook.exe` without blob support and `MetaHook_blob.exe` with it (plus `/INCLUDE:_g_pBlobBuffer`, which keeps the unreferenced `.blob` section the loader fills at runtime). Blob engines must run under `MetaHook_blob.exe`; `MetaHook.exe` fails early with "please use metahook_blob.exe".
 - Missing required gamedata identities/symbols fail early via `MH_SysError`; add or correct upstream catalog data rather than restoring removed scanning fallbacks.
 - `launcher.cpp` contains helper code that does not participate in the current main flow (for example, `SetActiveProcess` is not called).
 

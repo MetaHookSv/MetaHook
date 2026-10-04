@@ -327,7 +327,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 
 		if (FIsBlob(pszEngineDLL))
 		{
-#if defined(METAHOOK_BLOB_SUPPORT) || defined(_DEBUG)
+#if defined(METAHOOK_BLOB_SUPPORT)
 			if (!g_BlobLoaderSectionBase)
 			{
 				g_BlobLoaderSectionBase = GetBlobLoaderSection((PVOID)hInstance, &g_BlobLoaderSectionSize);

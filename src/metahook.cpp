@@ -247,7 +247,7 @@ extern "C"
 
 DWORD MH_NLoadBlob(BYTE* pBuffer, void** pBlobFootPrint, void** pv, DWORD dwBufferSize)
 {
-#if defined(METAHOOK_BLOB_SUPPORT) || defined(_DEBUG)
+#if defined(METAHOOK_BLOB_SUPPORT)
 	auto hBlob = LoadBlobFromBuffer(pBuffer, dwBufferSize, g_BlobLoaderSectionBase, g_BlobLoaderSectionSize);
 
 	if (hBlob)

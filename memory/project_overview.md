@@ -42,7 +42,7 @@ MetaHook is the standalone Windows x86 launcher and public API for GoldSrc/SvEng
 - `install/x86/<configuration>/`: executable, PDB, SDL2/SDL3 DLLs, SDL SDK headers/libraries/licenses and `svencoop/metahook/gamedata`; ignored.
 - Runtime plugins/configs live in the target game's `<mod>/metahook/` tree, not in repository-root `plugins.lst`.
 
-The source supports GoldSrc, GoldSrc HL25, SvEngine, CoF and legacy blob paths. Actual startup requires a matching catalog identity and data. Blob compilation is enabled by `_DEBUG` or `METAHOOK_BLOB_SUPPORT`; the current Release target does not enable it. These are implementation capabilities, not a new game compatibility certification.
+The source supports GoldSrc, GoldSrc HL25, SvEngine, CoF and legacy blob paths. Actual startup requires a matching catalog identity and data. The CMake project builds `MetaHook_blob.exe` with blob support (`METAHOOK_BLOB_SUPPORT`) alongside the ordinary `MetaHook.exe` in both Debug and Release; the ordinary target never enables blob. These are implementation capabilities, not a new game compatibility certification.
 
 ## Migrated knowledge
 

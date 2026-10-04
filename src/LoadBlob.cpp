@@ -214,7 +214,7 @@ bool BlobVerifyStringRange(PVOID Ptr, ULONG Size, PVOID ValidBase, ULONG ValidSi
 
 BlobHandle_t LoadBlobFromBuffer(BYTE* pBuffer, DWORD dwBufferSize, PVOID BlobSectionBase, ULONG BlobSectionSize)
 {
-#if defined(METAHOOK_BLOB_SUPPORT) || defined(_DEBUG)
+#if defined(METAHOOK_BLOB_SUPPORT)
 	auto pBlobModule = new (std::nothrow) BlobModule_t;
 
 	if (!pBlobModule)
@@ -421,7 +421,7 @@ BlobHandle_t LoadBlobFromBuffer(BYTE* pBuffer, DWORD dwBufferSize, PVOID BlobSec
 
 BlobHandle_t LoadBlobFile(const char *szFileName, PVOID BlobSectionBase, ULONG BlobSectionSize)
 {
-#if defined(METAHOOK_BLOB_SUPPORT) || defined(_DEBUG)
+#if defined(METAHOOK_BLOB_SUPPORT)
 
 	BlobHandle_t hBlob = NULL;
 
