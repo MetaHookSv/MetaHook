@@ -29,6 +29,8 @@ set_target_properties(capstone-static PROPERTIES FOLDER "capstone")
 target_include_directories(capstone-static INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/capstone_fork/include")
 add_subdirectory(thirdparty/MemoryModulePP EXCLUDE_FROM_ALL)
+# Group the vendored MemoryModulePP library under one IDE filter.
+set_target_properties(MemoryModule PROPERTIES FOLDER "MemoryModulePP")
 if(METAHOOK_BUILD_SDL)
     include(cmake/SDL.cmake)
 endif()
