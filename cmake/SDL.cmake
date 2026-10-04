@@ -18,6 +18,14 @@ foreach(option TESTS STATIC INSTALL_CPACK INSTALL_SDL3)
 endforeach()
 add_subdirectory(thirdparty/sdl2-compat-fork)
 
+# Group the SDL libraries under one IDE filter.
+foreach(sdl_target SDL_uclibc SDL2 SDL2_test SDL2main SDL3-shared)
+    if(TARGET ${sdl_target})
+        set_target_properties(${sdl_target} PROPERTIES FOLDER "SDL")
+    endif()
+endforeach()
+unset(sdl_target)
+
 # SDL_INSTALL only gates the vendor SDK rules; the runtime DLLs are the only SDL
 # artifacts this build ships, installed beside MetaHook.exe.
 install(FILES $<TARGET_FILE:SDL3-shared> DESTINATION ".")
