@@ -23,6 +23,8 @@ foreach(option BUILD_SHARED BUILD_TESTS BUILD_CSTOOL INSTALL BUILD_DIET)
     set(CAPSTONE_${option} OFF CACHE BOOL "" FORCE)
 endforeach()
 add_subdirectory(thirdparty/capstone_fork EXCLUDE_FROM_ALL)
+# Group the vendored Capstone library under one IDE filter.
+set_target_properties(capstone-static PROPERTIES FOLDER "capstone")
 # This Capstone version does not publish its public include directory.
 target_include_directories(capstone-static INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/capstone_fork/include")
