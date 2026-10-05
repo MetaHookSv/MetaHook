@@ -90,6 +90,14 @@ API 115 把旧的 `cbSize < sizeof(mh_gamesymbol_t)` 拒绝规则改成版本化
 - cvar callback 先探测原生 `cvar_hooks`；不存在时解析编号 `Cvar_Set_to_Cvar_DirectSet_callsite_N` PATCH 并转到 managed callback 链表。
 - DLL 通知通过 `InvalidateModule` 使缓存失效。详见 [[metahook/private-symbols]]。
 
+### Blob 客户端来源注册（2026-10-05）
+
+- 触发信号：CS3266 启动时，插件查询客户端符号返回 `MODULE_PATH_UNAVAILABLE`。
+- 根因：`MH_NLoadBlob` 手动映射客户端，Windows 的 `GetModuleFileName` 无法识别该模块；此前只为 Blob 引擎注册了原始文件来源。
+- 正确做法：用游戏文件系统的 `GetLocalPath("cl_dlls/client.dll")` 解析实际路径，在 Blob 加载通知和客户端入口执行前调用 `RegisterModuleFileSource`；卸载沿用现有通知中的身份失效处理。
+- 验证：Debug Win32 构建及 11 个 launcher 快照校验通过。运行时断点确认注册实际客户端路径。另补齐 BulletPhysics、Renderer 的 cstrike-3248/3647 消费清单，并修正上游 hl-3266 的 `R_GLStudioDrawPoints` ATI 分支误定位后，D:\\CS3266 全部十个插件启动、de_dust2 加载、截图、切换 de_dust 和退出（code 0）通过。
+- 范围：真实游戏验证覆盖 CS3266 Windows Blob；没有据此宣称其它引擎或卸载重载场景通过。上游地址修复尚未发布，验证使用本地生成且校验过的 gamedata。
+
 ## 构建、安装与验证边界
 
 `METAHOOK_SYNC_GAMEDATA=ON` 时，CMake 每次构建调用同步器（带 `--manifest scripts/manifests/metahook.json`），输出默认在 `build/x86/<configuration>/assets/svencoop/metahook/gamedata`：`index.json` 加每个版本的稳定 `<gameVersion>.json`（如 `hl-4554.json`），只保留 manifest 声明的 launcher symbols 与 GameData 实际读取的字段。原始上游快照与最后一次 index 持久缓存在 `build/x86/<configuration>/gamedata-sync/raw`，后续构建复用；index 不可达时回退缓存 index 以支持离线构建，缓存不在构建间清理。安装到 `install/x86/<configuration>/svencoop/metahook/gamedata`。OFF 仅安装已有数据，不触发下载。
