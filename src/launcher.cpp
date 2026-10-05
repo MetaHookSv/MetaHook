@@ -222,7 +222,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 		if (dwStatus && dwStatus != WAIT_ABANDONED)
 		{
 			MessageBoxA(NULL, "Could not launch game.\nOnly one instance of this game can be run at a time.", "Error", MB_ICONERROR);
-			return 0;
+			return 1;
 		}
 	}
 #endif
@@ -288,14 +288,14 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 				registry->WriteInt("EngineD3D", FALSE);
 
 				if (MessageBoxA(NULL, "The game has detected that the previous attempt to start in D3D video mode failed.\nThe game will now run attempt to run in openGL mode.", "Video mode change failure", MB_OKCANCEL | MB_ICONWARNING) != IDOK)
-					return 0;
+					return 1;
 			}
 			else
 			{
 				registry->WriteString("EngineDLL", "sw.dll");
 
 				if (MessageBoxA(NULL, "The game has detected that the previous attempt to start in openGL video mode failed.\nThe game will now run in software mode.", "Video mode change failure", MB_OKCANCEL | MB_ICONWARNING) != IDOK)
-					return 0;
+					return 1;
 			}
 
 			registry->WriteInt("ScreenWidth", 640);
@@ -335,7 +335,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 				if (!g_BlobLoaderSectionBase)
 				{
 					MH_SysError("No available \".blob\" section to load blob engine : %s.", pszEngineDLL);
-					return 0;
+					return 1;
 				}
 				else
 				{
@@ -343,7 +343,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 					if (!VirtualProtect(g_BlobLoaderSectionBase, g_BlobLoaderSectionSize, PAGE_EXECUTE_READWRITE, &dwOldProtect))
 					{
 						MH_SysError("Failed to make \".blob\" section executable for blob engine : %s.", pszEngineDLL);
-						return 0;
+						return 1;
 					}
 				}
 			}
@@ -351,7 +351,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 			if (1)
 			{
 				MH_SysError("This build of metahook does not support blob engine : %s.\nPlease use metahook_blob.exe instead.", pszEngineDLL);
-				return 0;
+				return 1;
 			}
 #endif
 			hBlobEngine = LoadBlobFile(pszEngineDLL, g_BlobLoaderSectionBase, g_BlobLoaderSectionSize);
@@ -359,7 +359,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 			if (!hBlobEngine)
 			{
 				MH_SysError("Could not load engine : %s.", pszEngineDLL);
-				return 0;
+				return 1;
 			}
 
 			if (hBlobEngine)
@@ -371,7 +371,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 				if (!EngineAPI)
 				{
 					MH_SysError("Could not get EngineAPI from engine : %s.", pszEngineDLL);
-					return 0;
+					return 1;
 				}
 			}
 		}
@@ -382,7 +382,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 			if (!hEngine)
 			{
 				MH_SysError("Could not load engine : %s.", pszEngineDLL);
-				return 0;
+				return 1;
 			}
 
 			CreateInterfaceFn EngineFactory = (CreateInterfaceFn)Sys_GetFactory(hEngine);
@@ -390,7 +390,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 			if (!EngineFactory)
 			{
 				MH_SysError("Could not get factory from engine : %s.", pszEngineDLL);
-				return 0;
+				return 1;
 			}
 
 			EngineAPI = (IEngineAPI *)EngineFactory(VENGINE_LAUNCHER_API_VERSION, NULL);
@@ -398,7 +398,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 			if (!EngineAPI)
 			{
 				MH_SysError("Could not get EngineAPI from engine : %s.", pszEngineDLL);
-				return 0;
+				return 1;
 			}
 		}
 
@@ -488,5 +488,5 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 
 	WSACleanup();
 
-	return 1;
+	return 0;
 }
