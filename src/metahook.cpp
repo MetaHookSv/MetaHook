@@ -259,6 +259,20 @@ DWORD MH_NLoadBlob(BYTE* pBuffer, void** pBlobFootPrint, void** pv, DWORD dwBuff
 		if (bIsClientDll)
 		{
 			g_hBlobClient = hBlob;
+
+			// Blob clients are not Windows modules, so GetModuleFileName cannot
+			// discover their source. Register it before any plugin load callback.
+			char clientPath[MAX_PATH] = {};
+			const char* localPath = g_pFileSystem_HL25
+				? g_pFileSystem_HL25->GetLocalPath("cl_dlls/client.dll", clientPath, sizeof(clientPath))
+				: g_pFileSystem->GetLocalPath("cl_dlls/client.dll", clientPath, sizeof(clientPath));
+			if (!localPath || !*localPath)
+			{
+				MH_SysError("MH_NLoadBlob: Could not locate the blob client file cl_dlls/client.dll.");
+				return 0;
+			}
+
+			GameData::RegisterModuleFileSource(GetBlobModuleImageBase(hBlob), localPath, GetBlobModuleImageSize(hBlob));
 		}
 
 		MH_DispatchLoadBlobNotificationCallback(hBlob, LOAD_DLL_NOTIFICATION_IS_LOAD);
