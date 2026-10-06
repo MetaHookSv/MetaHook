@@ -148,10 +148,19 @@ disabled, as in the original launcher project. Neither prevented a build.
 - Scope: upstream alias publication is still required for production data to activate this feature. The user explicitly excluded real csldr verification; no game startup or gameplay claim is made.
 - Upstream follow-up: `D:/GoldSrc_VibeSignatures` now declares the three filenames in 15 Windows client configs, freezes them into optional module `binary_aliases` metadata and exports `binaries.client.windows.alias`. A real local cstrike-10210 snapshot passed generation and both BulletPhysics/CaptionMod pruning/validation with the reported symbols present. Upstream changes remain local and require publication through the normal release pipeline.
 
+## BLOB SafeSEH compatibility (2026-10-06, MetaHookSv issue #908)
+
+- Trigger: CS 1.6 build 3266 exited with `0xE06D7363` on map load under the Release BLOB launcher, including with an empty plugin list. The debugger exposed `0xC00001A5` (invalid exception handler) for a handler inside `.blob`.
+- Root cause/constraint: only Debug disabled SafeSEH. Release's link-time table cannot include exception handlers from the BLOB engine loaded into the executable at runtime; the failing release had 99 entries, while the working old executable had no table.
+- Correct approach: apply `/SAFESEH:NO` specifically to `MetaHook_blob` in every configuration. Preserve the non-BLOB launcher's settings.
+- Verification: both normal x86 Debug/Release build-and-install entrypoints exited 0, including gamedata validation of 11 snapshots per configuration. PE inspection confirmed both BLOB targets have zero `SEHandlerTable`/`SEHandlerCount` and retain `.blob`; ordinary Release retains a nonempty table (96 entries). Debug retains the existing VC-LTL LNK4075 warnings.
+- Runtime verification: the newly built Release launcher ran `de_dust2` on build 3266 with metamod/AMXX for 45 seconds with an actual empty plugin list. A second 45-second run with VGUI2Extension + HalflifeCLI returned the map/build/player status and an echo, then `quit` exited 0. The empty-list process was terminated by the harness after observation. The original launcher was not overwritten, and `plugins.lst` was restored byte-for-byte.
+- Scope: this addresses BLOB exception dispatch, not the independent Renderer startup crash caused by `R_ForceCVars` resolving to `Cvar_DirectSet`; that is tracked in [GoldSrc_VibeSignatures #336](https://github.com/HLND2T/GoldSrc_VibeSignatures/issues/336). Other game builds and Debug gameplay were not runtime-tested. Build/PE evidence: `build/verification/issue908-*`; game evidence: the surrounding aggregator's ignored `build/issue908/fixed-build-*`.
+
 ## Runtime and verification limitations
 
 - Build success does not validate game startup, plugin loading or gameplay.
-- Game startup/plugin compatibility remains untested in this standalone checkout.
+- Runtime coverage is limited to the explicitly recorded game/plugin smoke checks above; it does not certify other engines or plugin combinations.
 - The inherited `scripts/tests` suite was not migrated; do not report its
   results as current standalone results.
 

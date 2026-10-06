@@ -92,6 +92,9 @@ metahook_configure_executable(MetaHook)
 add_executable(MetaHook_blob WIN32)
 metahook_configure_executable(MetaHook_blob)
 target_compile_definitions(MetaHook_blob PRIVATE METAHOOK_BLOB_SUPPORT)
+# Blob exception handlers are loaded into this image at runtime and cannot be
+# present in the link-time SafeSEH table, including in Release builds.
+target_link_options(MetaHook_blob PRIVATE /SAFESEH:NO)
 # Keep the placeholder that carries the ".blob" section: it has no references,
 # so LTCG + /OPT:REF would otherwise drop the whole section and no blob engine
 # could be loaded. g_pBlobBuffer has C linkage, hence the leading underscore.
