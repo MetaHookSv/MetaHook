@@ -59,13 +59,27 @@ typedef struct BlobSection_s
 
 typedef struct BlobImportEntry_s
 {
-	BlobImportEntry_s(ULONG_PTR* a1, HMODULE a2, const char* a3, const char* a4) : ThunkFunction(a1), hProcDll(a2), DllName(a3), FunctionName(a4)
+	BlobImportEntry_s(ULONG_PTR* a1, HMODULE a2, const char* a3, const char* a4, FARPROC original) :
+		ThunkFunction(a1), hProcDll(a2), DllName(a3), FunctionName(a4 ? a4 : ""), OriginalFunction(original)
 	{
 	};
+	bool MatchesFunction(const char* name) const
+	{
+		if (!name || IS_INTRESOURCE(name))
+			return false;
+		if (!FunctionName.empty())
+			return !stricmp(FunctionName.c_str(), name);
+		// Ordinal imports have no name in the BLOB. Resolve the requested name
+		// against the same DLL and compare the original export, not the IAT
+		// slot that an earlier hook may already have overwritten.
+		const auto address = GetProcAddress(hProcDll, name);
+		return address && address == OriginalFunction;
+	}
 	ULONG_PTR* ThunkFunction;
 	HMODULE hProcDll;
 	std::string DllName;
 	std::string FunctionName;
+	FARPROC OriginalFunction;
 }BlobImportEntry_t;
 
 typedef struct BlobModule_s
@@ -388,12 +402,10 @@ BlobHandle_t LoadBlobFromBuffer(BYTE* pBuffer, DWORD dwBufferSize, PVOID BlobSec
 				return NULL;
 			}
 
-			if (!bIsLoadByOrdinal)
-			{
-				pBlobModule->ImportEntries.emplace_back(&pThunk->u1.AddressOfData, hProcDll, pszDllName, pszProcName);
-			}
-
-			pThunk->u1.AddressOfData = (DWORD)GetProcAddress(hProcDll, pszProcName);
+			const auto original = GetProcAddress(hProcDll, pszProcName);
+			pBlobModule->ImportEntries.emplace_back(&pThunk->u1.AddressOfData, hProcDll, pszDllName,
+				bIsLoadByOrdinal ? NULL : pszProcName, original);
+			pThunk->u1.AddressOfData = (DWORD)original;
 
 			pThunk++;
 
@@ -551,7 +563,7 @@ hook_t* MH_BlobIATHook(BlobHandle_t hBlob, const char* pszModuleName, const char
 
 	for (const auto& entry : pBlobModule->ImportEntries)
 	{
-		if (!stricmp(entry.DllName.c_str(), pszModuleName) && !stricmp(entry.FunctionName.c_str(), pszFuncName))
+		if (!stricmp(entry.DllName.c_str(), pszModuleName) && entry.MatchesFunction(pszFuncName))
 		{
 			return MH_CreateIATHook(NULL, hBlob, pszModuleName, pszFuncName, pNewFuncAddr, pOrginalCall, entry.ThunkFunction);
 		}
@@ -581,7 +593,7 @@ bool MH_BlobHasImportEx(BlobHandle_t hBlob, const char* pszModuleName, const cha
 
 	for (const auto& entry : pBlobModule->ImportEntries)
 	{
-		if (!stricmp(entry.DllName.c_str(), pszModuleName) && !stricmp(entry.FunctionName.c_str(), pszFuncName))
+		if (!stricmp(entry.DllName.c_str(), pszModuleName) && entry.MatchesFunction(pszFuncName))
 		{
 			return true;
 		}
