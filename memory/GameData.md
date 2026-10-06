@@ -98,6 +98,17 @@ API 115 把旧的 `cbSize < sizeof(mh_gamesymbol_t)` 拒绝规则改成版本化
 - 验证：Debug Win32 构建及 11 个 launcher 快照校验通过。运行时断点确认注册实际客户端路径。另补齐 BulletPhysics、Renderer 的 cstrike-3248/3647 消费清单，并修正上游 hl-3266 的 `R_GLStudioDrawPoints` ATI 分支误定位后，D:\\CS3266 全部十个插件启动、de_dust2 加载、截图、切换 de_dust 和退出（code 0）通过。
 - 范围：真实游戏验证覆盖 CS3266 Windows Blob；没有据此宣称其它引擎或卸载重载场景通过。上游地址修复尚未发布，验证使用本地生成且校验过的 gamedata。
 
+## 客户端模块文件别名（issue #903）
+
+- 触发信号：代理 `client.dll` 加载重命名的原客户端后，插件查询返回 `MODULE_NOT_FOUND`。
+- 根因：原客户端与代理拥有不同 CRC64、加载基址和映像大小；只替换哈希会把原客户端 RVA 错加到代理基址。
+- 数据：上游版本快照（不是 schema 4 的 `index.json`）可在 `binaries.client.windows` 添加 `"alias": ["client_orig.dll", "client_original.dll", "client_org.dll"]`。每个名字对应该条目的 `crc64`。这是 schema 5 的可选扩展；同步器保留字段，校验器要求非空文件名数组元素，禁止路径、控制字符和 Windows 文件名非法字符。缺省及空数组兼容旧数据。
+- 查询：`ClientDLL_Initialize` 在插件 `LoadClient` 前登记真实客户端。先查自身；仅 MODULE_NOT_FOUND / SYMBOL_NOT_FOUND 时，按 catalog 声明顺序及数组顺序查询同目录已加载的 alias，核验磁盘 CRC64，首个符号命中者优先。其它错误不触发回退。不会主动加载 DLL，也不扩大到 engine 或镜像查询。
+- 地址：共享内部选择路径同时返回命中模块的基址和大小；Resolve 使用该模块做 RVA 边界检查和地址计算。普通查询、scalar、structMember、存在性探测遵循同一选择规则。`GetModuleCRC64`、按 CRC64 精确查询、公开 ABI 及镜像地址空间不变。
+- 生命周期：查询期间临时持有候选 DLL 引用；不缓存 alias 命中或未命中，复用既有哈希缓存与卸载失效。客户端上下文随身份失效或会话 reset 清除。loader 通知中不做 alias 查找或文件 I/O；候选失败信息去重并限量保存在 `GetDiagnostics()`。
+- 验证方式：`cmake -S tests -B build/alias-tests -A Win32`，构建后运行 CTest；用真实测试 DLL 验证地址归属、优先级、CRC64、同名异目录、未加载、卸载重载、镜像和 Blob。`python -m unittest discover -s scripts/tests -v` 验证同步与校验行为；设置 `GAMEDATA_SCRIPTS_DIR` 可对其它组件脚本运行同组用例。
+- 范围：消费端支持不替代上游发布；上游添加 alias 后需正常同步生成带新 SHA-256 的索引和快照。本次按用户要求不验证真实 csldr。
+
 ## 构建、安装与验证边界
 
 `METAHOOK_SYNC_GAMEDATA=ON` 时，CMake 每次构建调用同步器（带 `--manifest scripts/manifests/metahook.json`），输出默认在 `build/x86/<configuration>/assets/svencoop/metahook/gamedata`：`index.json` 加每个版本的稳定 `<gameVersion>.json`（如 `hl-4554.json`），只保留 manifest 声明的 launcher symbols 与 GameData 实际读取的字段。原始上游快照与最后一次 index 持久缓存在 `build/x86/<configuration>/gamedata-sync/raw`，后续构建复用；index 不可达时回退缓存 index 以支持离线构建，缓存不在构建间清理。安装到 `install/x86/<configuration>/svencoop/metahook/gamedata`。OFF 仅安装已有数据，不触发下载。

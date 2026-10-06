@@ -93,15 +93,74 @@ namespace
 		std::string sha256;
 	};
 
+	struct ClientAlias
+	{
+		std::string filename;
+		uint64_t crc64;
+	};
+
 	struct GameDataCatalog
 	{
 		bool available = false;
 		std::unordered_map<uint64_t, std::unique_ptr<ModuleCatalog>> modules;
 		std::unordered_map<std::string, std::vector<SnapshotDeclaration>> snapshotDeclarations;
 		std::vector<std::string> diagnostics;
+		std::vector<ClientAlias> clientAliases;
 	};
 
 	GameDataCatalog g_catalog;
+	std::mutex g_aliasDiagnosticsMutex;
+	std::vector<std::string> g_aliasDiagnostics;
+
+	void AddAliasDiagnostic(const std::wstring& path, const char* reason)
+	{
+		int size = WideCharToMultiByte(CP_UTF8, 0, path.c_str(), -1, nullptr, 0, nullptr, nullptr);
+		std::string text(size > 0 ? size : 1, '\0');
+		if (size > 0)
+			WideCharToMultiByte(CP_UTF8, 0, path.c_str(), -1, &text[0], size, nullptr, nullptr);
+		text.pop_back();
+		text = "client alias '" + text + "': " + reason;
+		std::lock_guard<std::mutex> lock(g_aliasDiagnosticsMutex);
+		for (const auto& existing : g_aliasDiagnostics)
+			if (existing == text) return;
+		constexpr size_t kMaxAliasDiagnostics = 128;
+		if (g_aliasDiagnostics.size() < kMaxAliasDiagnostics)
+			g_aliasDiagnostics.push_back(std::move(text));
+	}
+
+	bool IsAliasFilename(const std::string& name)
+	{
+		if (name.empty() || name == "." || name == ".." || name.back() == '.' || name.back() == ' ')
+			return false;
+		for (unsigned char c : name)
+			if (c < 32 || strchr("/\\:<>\"|?*", c)) return false;
+		return true;
+	}
+
+	bool ReadClientAliases(const rapidjson::Value& win, uint64_t crc64,
+		std::vector<ClientAlias>& aliases)
+	{
+		auto it = win.FindMember("alias");
+		if (it == win.MemberEnd()) return true;
+		if (!it->value.IsArray()) return false;
+		std::vector<ClientAlias> parsed;
+		for (const auto& value : it->value.GetArray())
+		{
+			if (!value.IsString()) return false;
+			std::string name(value.GetString(), value.GetStringLength());
+			if (!IsAliasFilename(name)) return false;
+			parsed.push_back({ std::move(name), crc64 });
+		}
+		for (auto& candidate : parsed)
+		{
+			bool duplicate = false;
+			for (const auto& existing : aliases)
+				if (existing.crc64 == candidate.crc64 && !_stricmp(existing.filename.c_str(), candidate.filename.c_str()))
+					duplicate = true;
+			if (!duplicate) aliases.push_back(std::move(candidate));
+		}
+		return true;
+	}
 
 	void AddDiagnostic(const char* fmt, ...)
 	{
@@ -819,6 +878,8 @@ namespace
 				continue;
 			}
 			moduleCrc64[moduleName] = v;
+			if (!strcmp(moduleName, "client") && !ReadClientAliases(*win, v, g_catalog.clientAliases))
+				AddDiagnostic("snapshot '%s': invalid client alias filenames", gameVersion);
 		}
 
 		const rapidjson::Value* records = FindMember(doc, "records");
@@ -1086,6 +1147,7 @@ namespace
 
 	std::mutex g_modulesMutex;
 	std::unordered_map<PVOID, std::shared_ptr<ModuleIdentity>> g_modules;
+	std::weak_ptr<ModuleIdentity> g_clientIdentity;
 
 	// Ldr DLL notifications can run under the loader lock. Queue invalidations
 	// without allocating or taking g_modulesMutex, then drain them at the next
@@ -1391,6 +1453,10 @@ namespace GameData
 	bool Initialize(const char* const* gamedataRoots, size_t gamedataRootCount)
 	{
 		g_catalog = GameDataCatalog{};
+		{
+			std::lock_guard<std::mutex> lock(g_aliasDiagnosticsMutex);
+			g_aliasDiagnostics.clear();
+		}
 
 		if (!gamedataRoots || gamedataRootCount == 0 || !gamedataRoots[0] || !gamedataRoots[0][0])
 		{
@@ -1422,6 +1488,12 @@ namespace GameData
 		{
 			if (!result.empty())
 				result += '\n';
+			result += diagnostic;
+		}
+		std::lock_guard<std::mutex> lock(g_aliasDiagnosticsMutex);
+		for (const auto& diagnostic : g_aliasDiagnostics)
+		{
+			if (!result.empty()) result += '\n';
 			result += diagnostic;
 		}
 		return result;
@@ -1555,6 +1627,13 @@ namespace GameData
 		g_modules[mirrorBase] = realId;
 	}
 
+	void RegisterClientModule(PVOID moduleBase)
+	{
+		auto identity = moduleBase ? GetOrCreateModuleIdentity(moduleBase) : nullptr;
+		std::lock_guard<std::mutex> lock(g_modulesMutex);
+		g_clientIdentity = identity;
+	}
+
 	void InvalidateModule(PVOID moduleBase, bool inLoaderCriticalRegion)
 	{
 		if (!moduleBase)
@@ -1580,6 +1659,7 @@ namespace GameData
 		std::unordered_map<PVOID, std::shared_ptr<ModuleIdentity>> staleModules;
 		std::lock_guard<std::mutex> lock(g_modulesMutex);
 		staleModules.swap(g_modules);
+		g_clientIdentity.reset();
 	}
 
 	mh_gamesymbol_status_t GetModuleCRC64(PVOID moduleBase, uint64_t* outCRC64)
@@ -1644,6 +1724,85 @@ namespace GameData
 // Public game symbol API.
 // ---------------------------------------------------------------------------
 
+namespace
+{
+	struct SymbolModule
+	{
+		PVOID base = nullptr;
+		ULONG imageSize = 0;
+		HMODULE reference = nullptr;
+		~SymbolModule() { if (reference) FreeLibrary(reference); }
+	};
+
+	bool IsMissingSymbol(mh_gamesymbol_status_t status)
+	{
+		return status == MH_GAMESYMBOL_MODULE_NOT_FOUND || status == MH_GAMESYMBOL_SYMBOL_NOT_FOUND;
+	}
+
+	template<typename Query>
+	mh_gamesymbol_status_t QueryModuleSymbol(PVOID moduleBase, Query query, SymbolModule& owner)
+	{
+		uint64_t crc64 = 0;
+		auto status = GameData::GetModuleCRC64(moduleBase, &crc64);
+		if (status != MH_GAMESYMBOL_OK) return status;
+		auto identity = GetOrCreateModuleIdentity(moduleBase);
+		owner.base = moduleBase; // Mirrors retain their caller-supplied address space.
+		owner.imageSize = identity->imageSize;
+		status = query(crc64);
+		if (!IsMissingSymbol(status) || MH_IsInLdrCriticalRegion()) return status;
+		{
+			std::lock_guard<std::mutex> lock(g_modulesMutex);
+			if (g_clientIdentity.lock() != identity || identity->moduleBase != moduleBase)
+				return status;
+		}
+		auto separator = identity->sourcePath.find_last_of(L"\\/");
+		if (separator == std::wstring::npos) return status;
+		auto directory = identity->sourcePath.substr(0, separator + 1);
+		for (auto& c : directory) if (c == L'/') c = L'\\';
+		for (const auto& alias : g_catalog.clientAliases)
+		{
+			// Snapshot strings are UTF-8, independently of the game's ANSI paths.
+			int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, alias.filename.c_str(), -1, nullptr, 0);
+			if (!length) continue;
+			std::wstring filename(length, L'\0');
+			MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, alias.filename.c_str(), -1, &filename[0], length);
+			filename.pop_back();
+			auto path = directory + filename;
+			SymbolModule candidate;
+			if (!GetModuleHandleExW(0, path.c_str(), &candidate.reference))
+			{
+				AddAliasDiagnostic(path, "not loaded");
+				continue;
+			}
+			std::wstring loadedPath;
+			if (!GetModuleFilePathW(candidate.reference, loadedPath) || _wcsicmp(path.c_str(), loadedPath.c_str()))
+			{
+				AddAliasDiagnostic(path, "loaded module path differs");
+				continue;
+			}
+			uint64_t candidateCRC = 0;
+			if (GameData::GetModuleCRC64(candidate.reference, &candidateCRC) != MH_GAMESYMBOL_OK)
+			{
+				AddAliasDiagnostic(path, "file CRC64 unavailable");
+				continue;
+			}
+			if (candidateCRC != alias.crc64)
+			{
+				AddAliasDiagnostic(path, "CRC64 does not match snapshot");
+				continue;
+			}
+			auto candidateStatus = query(candidateCRC);
+			if (IsMissingSymbol(candidateStatus)) continue;
+			owner.base = candidate.reference;
+			owner.imageSize = GetOrCreateModuleIdentity(candidate.reference)->imageSize;
+			owner.reference = candidate.reference;
+			candidate.reference = nullptr;
+			return candidateStatus;
+		}
+		return status;
+	}
+}
+
 mh_gamesymbol_status_t MH_GetModuleCRC64(PVOID moduleBase, uint64_t* outCRC64)
 {
 	return GameData::GetModuleCRC64(moduleBase, outCRC64);
@@ -1668,12 +1827,10 @@ mh_gamesymbol_status_t MH_QueryGameSymbol(PVOID moduleBase, const char* symbolNa
 	memset(outSymbol, 0, cbSize < sizeof(mh_gamesymbol_t) ? cbSize : (DWORD)sizeof(mh_gamesymbol_t));
 	outSymbol->cbSize = cbSize;
 
-	uint64_t crc64 = 0;
-	mh_gamesymbol_status_t st = GameData::GetModuleCRC64(moduleBase, &crc64);
-	if (st != MH_GAMESYMBOL_OK)
-		return st;
-
-	return GameData::QueryByCRC64(crc64, symbolName, outSymbol);
+	SymbolModule owner;
+	return QueryModuleSymbol(moduleBase, [&](uint64_t crc64) {
+		return GameData::QueryByCRC64(crc64, symbolName, outSymbol);
+	}, owner);
 }
 
 static mh_gamesymbol_status_t MH_QueryGameSymbolPlainValue(PVOID moduleBase, const char* symbolName,
@@ -1687,12 +1844,10 @@ static mh_gamesymbol_status_t MH_QueryGameSymbolPlainValue(PVOID moduleBase, con
 	if (!moduleBase)
 		return MH_GAMESYMBOL_INVALID_ARGUMENT;
 
-	uint64_t crc64 = 0;
-	mh_gamesymbol_status_t st = GameData::GetModuleCRC64(moduleBase, &crc64);
-	if (st != MH_GAMESYMBOL_OK)
-		return st;
-
-	return queryByCRC64(crc64, symbolName, outValue);
+	SymbolModule owner;
+	return QueryModuleSymbol(moduleBase, [&](uint64_t crc64) {
+		return queryByCRC64(crc64, symbolName, outValue);
+	}, owner);
 }
 
 mh_gamesymbol_status_t MH_QueryGameSymbolScalar(PVOID moduleBase, const char* symbolName, uint32_t* outValue)
@@ -1723,14 +1878,17 @@ mh_gamesymbol_status_t MH_ResolveGameSymbol(PVOID moduleBase, const char* symbol
 
 	mh_gamesymbol_t sym;
 	sym.cbSize = sizeof(sym);
-	mh_gamesymbol_status_t st = MH_QueryGameSymbol(moduleBase, symbolName, &sym);
+	SymbolModule owner;
+	mh_gamesymbol_status_t st = QueryModuleSymbol(moduleBase, [&](uint64_t crc64) {
+		return GameData::QueryByCRC64(crc64, symbolName, &sym);
+	}, owner);
 	if (st != MH_GAMESYMBOL_OK)
 		return st;
 
 	if (sym.kind != expectedKind)
 		return MH_GAMESYMBOL_KIND_MISMATCH;
 
-	ULONG imageSize = GetOrCreateModuleIdentity(moduleBase)->imageSize;
+	ULONG imageSize = owner.imageSize;
 	if (imageSize != 0)
 	{
 		if (sym.rva >= imageSize)
@@ -1743,7 +1901,7 @@ mh_gamesymbol_status_t MH_ResolveGameSymbol(PVOID moduleBase, const char* symbol
 		return MH_GAMESYMBOL_RVA_OUT_OF_RANGE;
 	}
 
-	*outAddress = (PVOID)((BYTE*)moduleBase + sym.rva);
+	*outAddress = (PVOID)((BYTE*)owner.base + sym.rva);
 	return MH_GAMESYMBOL_OK;
 }
 
@@ -1752,14 +1910,9 @@ mh_gamesymbol_status_t MH_IsGameSymbolAvailable(PVOID moduleBase, const char* sy
 	if (!moduleBase || !symbolName || !*symbolName)
 		return MH_GAMESYMBOL_INVALID_ARGUMENT;
 
-	uint64_t crc64 = 0;
-	mh_gamesymbol_status_t st = GameData::GetModuleCRC64(moduleBase, &crc64);
-	if (st != MH_GAMESYMBOL_OK)
-		return st;
-
 	mh_gamesymbol_t sym;
 	sym.cbSize = sizeof(sym);
-	return MH_QueryGameSymbolByCRC64(crc64, symbolName, &sym);
+	return MH_QueryGameSymbol(moduleBase, symbolName, &sym);
 }
 
 PVOID MH_SearchPatternMasked(PVOID searchBase, DWORD searchLength, const BYTE* patternBytes, const BYTE* patternMask, DWORD patternLength)

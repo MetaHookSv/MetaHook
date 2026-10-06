@@ -138,6 +138,16 @@ disabled, as in the original launcher project. Neither prevented a build.
 - Verification: actionlint 1.7.12 accepted both workflows. The x86 Release entrypoint built and installed with exit 0, and the manifest-mode gamedata gate passed (11 snapshots). The action's packaging script, run verbatim from `install/x86/Release` with 7-Zip 24.07, exited 0 including `7z t`; the archive held 18 files (2,280,521 bytes), and every extracted file matched the install tree by SHA-256. Logs: `build/verification/blob-package-*.log`.
 - Scope: packaging only; no hosted run, game startup or blob-engine smoke test was performed.
 
+## Client gamedata aliases (2026-10-06, issue #903)
+
+- Trigger/root cause: a proxy client and its renamed original have different file identities and image bases. Alias lookup must select both the catalog CRC64 and the address-owning loaded module.
+- Implementation: optional snapshot client filenames survive pruning; the real client's missing symbols can resolve through same-directory, already-loaded modules with matching CRC64. Public CRC64 queries and mirror/Blob address semantics remain unchanged. See [[metahook/game-data]].
+- Verification: standalone Win32 Debug and Release builds of both `MetaHook` and `MetaHook_blob` exited 0. Native tests in `tests/` passed in both configurations, including actual DLL load/unload, address ownership, candidate ordering, CRC mismatch, cross-directory rejection, scalar/member queries, bounds, mirror/Blob regression and merging two indexes.
+- Script verification: the three new Python tests passed against all 14 component script pairs (42 executions); the existing BetterSpray and VGUI2Extension pruning tests also passed. All 14 manifest gates passed (171 snapshots total). Renderer initially failed against stale build output; normal synchronization regenerated its 21 snapshots and its gate then passed.
+- Environment: the aggregator build could not regenerate because its existing LaunchGame target referenced missing `D:\CS3266\czero\liblist.gam`; the independent launcher build supplied the build evidence. Logs: `build/alias-standalone-debug.log`, `build/alias-standalone-release.log`, `build/alias-renderer-sync.log`.
+- Scope: upstream alias publication is still required for production data to activate this feature. The user explicitly excluded real csldr verification; no game startup or gameplay claim is made.
+- Upstream follow-up: `D:/GoldSrc_VibeSignatures` now declares the three filenames in 15 Windows client configs, freezes them into optional module `binary_aliases` metadata and exports `binaries.client.windows.alias`. A real local cstrike-10210 snapshot passed generation and both BulletPhysics/CaptionMod pruning/validation with the reported symbols present. Upstream changes remain local and require publication through the normal release pipeline.
+
 ## Runtime and verification limitations
 
 - Build success does not validate game startup, plugin loading or gameplay.
