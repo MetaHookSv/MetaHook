@@ -1196,6 +1196,8 @@ int ClientDLL_Initialize(struct cl_enginefuncs_s* pEnginefuncs, int iVersion)
 		g_hMirrorClient = MH_LoadMirrorDLL_FileSystem("cl_dlls\\client.dll");
 	}
 
+	GameData::RegisterClientModule(MH_GetClientBase());
+
 	MH_TransactionHookBegin();
 
 	for (plugin_t* plug = g_pPluginBase; plug; plug = plug->next)

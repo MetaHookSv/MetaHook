@@ -60,6 +60,10 @@ namespace GameData
 	// module identity (and therefore the same CRC-64/XZ and hash cache).
 	void RegisterMirrorAlias(PVOID mirrorBase, PVOID realBase);
 
+	// Enable snapshot client aliases for this real client image only. Register
+	// before plugin LoadClient, outside the loader critical region.
+	void RegisterClientModule(PVOID moduleBase);
+
 	// Invalidate a loaded module identity and every mirror alias that refers to
 	// it. Loader-critical notifications are deferred until a safe query point.
 	void InvalidateModule(PVOID moduleBase, bool inLoaderCriticalRegion);
