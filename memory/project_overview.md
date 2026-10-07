@@ -8,7 +8,7 @@ permalink: metahook/project-overview
 
 ## Purpose and boundary
 
-MetaHook is the standalone Windows x86 launcher and public API for GoldSrc/SvEngine client-side plugins. It starts the game engine (a normal PE or a legacy blob), resolves engine-private symbols from the gamedata catalog, installs hooks, drives plugin lifecycles, forwards DLL load notifications and reclaims resources on shutdown. It was extracted from MetaHookSv commit `11a852774b1725d02735aeb348c32a7bf454507c` (standalone CMake integration: `2f69a31`); the original notes remain in the [source knowledge tree](https://github.com/hzqst/MetaHookSv/tree/11a852774b1725d02735aeb348c32a7bf454507c/memory).
+MetaHook is the standalone Windows x86 launcher and public API for GoldSrc/SvEngine client-side plugins. It starts the game engine (a normal PE or a legacy blob), resolves engine-private symbols from the gamedata catalog, installs hooks, drives plugin lifecycles, forwards DLL load notifications and reclaims resources on shutdown. It was extracted from MetaHookSv commit `11a852774b1725d02735aeb348c32a7bf454507c` (standalone CMake integration: `2f69a31`); the original notes remain in the [source knowledge tree](https://github.com/MetaHookSv/MetaHookSv/tree/11a852774b1725d02735aeb348c32a7bf454507c/memory).
 
 - **Loader** (`src/`): engine startup, symbol resolution, hook infrastructure, plugin lifecycle and DLL notifications (see the sections below).
 - **Public interfaces** (`include/metahook.h`, `include/Interface/`, HLSDK/SourceSDK/VGUI headers): paths and ABI kept stable for external consumers.

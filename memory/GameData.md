@@ -16,7 +16,7 @@ tags:
 
 GameData 是 launcher 与插件共享的本地符号 catalog，从 `<game>/<mod>/metahook/gamedata/index.json` 以及所有嵌套的 `gamedata/**/index.json` 读取并冻结只读符号表，按 `(moduleCRC64, symbolName)` 查询。根 index.json 必须存在且合法；嵌套 index.json 为尽力合并，单个失败只记入 diagnostics，不使整份 catalog 失败。模块 CRC-64/XZ 从原始二进制文件懒计算，不由游戏名或当前内存镜像代替。
 
-本笔记从 MetaHookSv 的 [GameData 原笔记](https://github.com/hzqst/MetaHookSv/blob/11a852774b1725d02735aeb348c32a7bf454507c/memory/GameData.md) 提取本体架构、API 契约与通用经验；逐插件迁移日志、旧 MSBuild 验证记录保留在原笔记。这里描述移植基线 API 115 的最终状态，不沿用原笔记中已被后续条目取代的 API 112、vtable unsupported 或严格 `cbSize` 规则。
+本笔记从 MetaHookSv 的 [GameData 原笔记](https://github.com/MetaHookSv/MetaHookSv/blob/11a852774b1725d02735aeb348c32a7bf454507c/memory/GameData.md) 提取本体架构、API 契约与通用经验；逐插件迁移日志、旧 MSBuild 验证记录保留在原笔记。这里描述移植基线 API 115 的最终状态，不沿用原笔记中已被后续条目取代的 API 112、vtable unsupported 或严格 `cbSize` 规则。
 
 ## 职责与源码入口
 
