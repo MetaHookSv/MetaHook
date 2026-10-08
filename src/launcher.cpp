@@ -1,6 +1,6 @@
 #include "metahook.h"
 #include <LoadDllMemoryApi.h>
-#include <tlhelp32.h> 
+#include <tlhelp32.h>
 
 #include "LoadBlob.h"
 #include "LoadDllNotification.h"
@@ -11,8 +11,8 @@
 #pragma warning(disable : 4733)
 #pragma comment(lib, "ws2_32.lib")
 
-IFileSystem_HL25 *g_pFileSystem_HL25 = nullptr;
-IFileSystem* g_pFileSystem = nullptr;
+IFileSystem_HL25* g_pFileSystem_HL25 = nullptr;
+IFileSystem*      g_pFileSystem      = nullptr;
 
 PVOID g_BlobLoaderSectionBase = NULL;
 ULONG g_BlobLoaderSectionSize = 0;
@@ -26,467 +26,468 @@ void MH_Shutdown(void);
 
 extern "C"
 {
-	void MH_SysError(const char* fmt, ...);
+    void MH_SysError(const char* fmt, ...);
 }
 
 extern "C"
 {
-	NTSYSAPI PIMAGE_NT_HEADERS NTAPI RtlImageNtHeader(PVOID Base);
-	NTSYSAPI NTSTATUS NTAPI NtTerminateProcess(
-		HANDLE   ProcessHandle,
-		NTSTATUS ExitStatus
-	);
+    NTSYSAPI PIMAGE_NT_HEADERS NTAPI RtlImageNtHeader(PVOID Base);
+    NTSYSAPI NTSTATUS NTAPI          NtTerminateProcess(
+        HANDLE   ProcessHandle,
+        NTSTATUS ExitStatus);
 }
 
 HINTERFACEMODULE LoadFileSystemModule(void)
 {
-	HINTERFACEMODULE hModule = Sys_LoadModule("filesystem_stdio.dll");
+    HINTERFACEMODULE hModule = Sys_LoadModule("filesystem_stdio.dll");
 
-	if (!hModule)
-	{
-		MessageBoxA(NULL, "Could not load filesystem dll.\nFileSystem crashed during construction.", "Fatal Error", MB_ICONERROR);
-		return NULL;
-	}
+    if (!hModule)
+    {
+        MessageBoxA(NULL, "Could not load filesystem dll.\nFileSystem crashed during construction.", "Fatal Error", MB_ICONERROR);
+        return NULL;
+    }
 
-	return hModule;
+    return hModule;
 }
 
-void SetEngineDLL(const char * szExeName, const char **pszEngineDLL)
+void SetEngineDLL(const char* szExeName, const char** pszEngineDLL)
 {
-	*pszEngineDLL = registry->ReadString("EngineDLL", "hw.dll");
+    *pszEngineDLL = registry->ReadString("EngineDLL", "hw.dll");
 
-	if (!stricmp(szExeName, "svencoop.exe"))
-		*pszEngineDLL = "hw.dll";
-	else if (CommandLine()->CheckParm("-soft") || CommandLine()->CheckParm("-software"))
-		*pszEngineDLL = "sw.dll";
-	else if (CommandLine()->CheckParm("-gl") || CommandLine()->CheckParm("-d3d"))
-		*pszEngineDLL = "hw.dll";
+    if (!stricmp(szExeName, "svencoop.exe"))
+        *pszEngineDLL = "hw.dll";
+    else if (CommandLine()->CheckParm("-soft") || CommandLine()->CheckParm("-software"))
+        *pszEngineDLL = "sw.dll";
+    else if (CommandLine()->CheckParm("-gl") || CommandLine()->CheckParm("-d3d"))
+        *pszEngineDLL = "hw.dll";
 
-	registry->WriteString("EngineDLL", *pszEngineDLL);
+    registry->WriteString("EngineDLL", *pszEngineDLL);
 }
 
 BOOL FindProcess(DWORD dwProcessID)
 {
-	HANDLE hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    HANDLE hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
-	if (!hProcessSnap)
-		return FALSE;
+    if (!hProcessSnap)
+        return FALSE;
 
-	PROCESSENTRY32 pe32;
-	pe32.dwSize = sizeof(pe32);
+    PROCESSENTRY32 pe32;
+    pe32.dwSize = sizeof(pe32);
 
-	if (Process32First(hProcessSnap, &pe32))
-	{
-		while (1)
-		{
-			if (pe32.th32ProcessID == dwProcessID)
-				return TRUE;
+    if (Process32First(hProcessSnap, &pe32))
+    {
+        while (1)
+        {
+            if (pe32.th32ProcessID == dwProcessID)
+                return TRUE;
 
-			if (!Process32Next(hProcessSnap, &pe32))
-				break;
-		}
-	}
+            if (!Process32Next(hProcessSnap, &pe32))
+                break;
+        }
+    }
 
-	return FALSE;
+    return FALSE;
 }
 
 BOOL SetActiveProcess(void)
 {
-	HKEY hKey;
-	DWORD dwType;
-	DWORD dwSize;
-	DWORD dwProcessId;
+    HKEY  hKey;
+    DWORD dwType;
+    DWORD dwSize;
+    DWORD dwProcessId;
 
-	if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\Valve\\Steam\\ActiveProcess", 0, KEY_ALL_ACCESS, &hKey) != ERROR_SUCCESS)
-	{
-		DWORD dwDisposition;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\Valve\\Steam\\ActiveProcess", 0, KEY_ALL_ACCESS, &hKey) != ERROR_SUCCESS)
+    {
+        DWORD dwDisposition;
 
-		if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\Valve\\Steam\\ActiveProcess", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hKey, &dwDisposition) != ERROR_SUCCESS)
-			return FALSE;
-	}
+        if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\Valve\\Steam\\ActiveProcess", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hKey, &dwDisposition) != ERROR_SUCCESS)
+            return FALSE;
+    }
 
-	RegQueryValueEx(hKey, "pid", 0, &dwType, (BYTE *)&dwProcessId, &dwSize);
+    RegQueryValueEx(hKey, "pid", 0, &dwType, (BYTE*)&dwProcessId, &dwSize);
 
-	if (!FindProcess(dwProcessId))
-	{
-		dwProcessId = GetCurrentProcessId();
-		RegSetValueEx(hKey, "pid", 0, REG_DWORD, (BYTE *)&dwProcessId, dwSize);
-	}
+    if (!FindProcess(dwProcessId))
+    {
+        dwProcessId = GetCurrentProcessId();
+        RegSetValueEx(hKey, "pid", 0, REG_DWORD, (BYTE*)&dwProcessId, dwSize);
+    }
 
-	RegCloseKey(hKey);
-	return TRUE;
+    RegCloseKey(hKey);
+    return TRUE;
 }
 
-class CScopedExitFileSystem {
+class CScopedExitFileSystem
+{
 public:
-	CScopedExitFileSystem(HINTERFACEMODULE h)
-	{
-		hFileSystem = h;
+    CScopedExitFileSystem(HINTERFACEMODULE h)
+    {
+        hFileSystem = h;
 
-		CreateInterfaceFn fsCreateInterface = (CreateInterfaceFn)Sys_GetFactory(hFileSystem);
+        CreateInterfaceFn fsCreateInterface = (CreateInterfaceFn)Sys_GetFactory(hFileSystem);
 
-		auto pFileSystemInterface = (void*)fsCreateInterface(FILESYSTEM_INTERFACE_VERSION, NULL);
+        auto pFileSystemInterface = (void*)fsCreateInterface(FILESYSTEM_INTERFACE_VERSION, NULL);
 
-		auto pFileSystemInterface_vftable = *(void***)pFileSystemInterface;
+        auto pFileSystemInterface_vftable = *(void***)pFileSystemInterface;
 
-		//compare GetFileTime and GetFileChangeTime
-		if (0 == memcmp(pFileSystemInterface_vftable[16], pFileSystemInterface_vftable[17], 16))
-		{
-			g_pFileSystem_HL25 = (IFileSystem_HL25*)pFileSystemInterface;
-		}
-		else
-		{
-			g_pFileSystem = (IFileSystem*)pFileSystemInterface;
-		}
+        //compare GetFileTime and GetFileChangeTime
+        if (0 == memcmp(pFileSystemInterface_vftable[16], pFileSystemInterface_vftable[17], 16))
+        {
+            g_pFileSystem_HL25 = (IFileSystem_HL25*)pFileSystemInterface;
+        }
+        else
+        {
+            g_pFileSystem = (IFileSystem*)pFileSystemInterface;
+        }
 
-		FILESYSTEM_ANY_MOUNT();
-		FILESYSTEM_ANY_ADDSEARCHPATH(Sys_GetLongPathName(), "ROOT");
-	}
+        FILESYSTEM_ANY_MOUNT();
+        FILESYSTEM_ANY_ADDSEARCHPATH(Sys_GetLongPathName(), "ROOT");
+    }
 
-	~CScopedExitFileSystem() {
+    ~CScopedExitFileSystem()
+    {
 
-		FILESYSTEM_ANY_UNMOUNT();
+        FILESYSTEM_ANY_UNMOUNT();
 
-		Sys_FreeModule(hFileSystem);
-	}
+        Sys_FreeModule(hFileSystem);
+    }
 
-	HINTERFACEMODULE hFileSystem;
+    HINTERFACEMODULE hFileSystem;
 };
 
 char* COM_SkipPath(char* pathname)
 {
-	char* last;
+    char* last;
 
-	last = pathname;
-	while (*pathname)
-	{
-		if (*pathname == '/' || *pathname == '\\')
-			last = pathname + 1;
-		pathname++;
-	}
-	return last;
+    last = pathname;
+    while (*pathname)
+    {
+        if (*pathname == '/' || *pathname == '\\')
+            last = pathname + 1;
+        pathname++;
+    }
+    return last;
 }
 
 void COM_FileBase(const char* in, char* out)
 {
-	int len, start, end;
+    int len, start, end;
 
-	len = strlen(in);
+    len = strlen(in);
 
-	// scan backward for '.'
-	end = len - 1;
-	while (end && in[end] != '.' && in[end] != '/' && in[end] != '\\')
-		end--;
+    // scan backward for '.'
+    end = len - 1;
+    while (end && in[end] != '.' && in[end] != '/' && in[end] != '\\')
+        end--;
 
-	if (in[end] != '.')		// no '.', copy to end
-		end = len - 1;
-	else
-		end--;					// Found ',', copy to left of '.'
+    if (in[end] != '.') // no '.', copy to end
+        end = len - 1;
+    else
+        end--; // Found ',', copy to left of '.'
 
 
-	// Scan backward for '/'
-	start = len - 1;
-	while (start >= 0 && in[start] != '/' && in[start] != '\\')
-		start--;
+    // Scan backward for '/'
+    start = len - 1;
+    while (start >= 0 && in[start] != '/' && in[start] != '\\')
+        start--;
 
-	if (start < 0 || (in[start] != '/' && in[start] != '\\'))
-		start = 0;
-	else
-		start++;
+    if (start < 0 || (in[start] != '/' && in[start] != '\\'))
+        start = 0;
+    else
+        start++;
 
-	// Length of new sting
-	len = end - start + 1;
+    // Length of new sting
+    len = end - start + 1;
 
-	// Copy partial string
-	strncpy(out, &in[start], len);
-	out[len] = 0;
+    // Copy partial string
+    strncpy(out, &in[start], len);
+    out[len] = 0;
 }
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
-	static char szNewCommandParams[2048];
+    static char szNewCommandParams[2048];
 
-	HANDLE hObject = NULL;
+    HANDLE hObject = NULL;
 
-	CommandLine()->CreateCmdLine(GetCommandLine());
+    CommandLine()->CreateCmdLine(GetCommandLine());
 
 #ifndef _DEBUG
-	BOOL (*IsDebuggerPresent)(void) = (BOOL (*)(void))GetProcAddress(GetModuleHandle("kernel32.dll"), "IsDebuggerPresent");
+    BOOL (*IsDebuggerPresent)(void) = (BOOL (*)(void))GetProcAddress(GetModuleHandle("kernel32.dll"), "IsDebuggerPresent");
 
-	if (!IsDebuggerPresent() && CommandLine()->CheckParm("-nomutex") == NULL)
-	{
-		hObject = CreateMutex(NULL, FALSE, "ValveHalfLifeLauncherMutex");
+    if (!IsDebuggerPresent() && CommandLine()->CheckParm("-nomutex") == NULL)
+    {
+        hObject = CreateMutex(NULL, FALSE, "ValveHalfLifeLauncherMutex");
 
-		DWORD dwStatus = WaitForSingleObject(hObject, 0);
+        DWORD dwStatus = WaitForSingleObject(hObject, 0);
 
-		if (dwStatus && dwStatus != WAIT_ABANDONED)
-		{
-			MessageBoxA(NULL, "Could not launch game.\nOnly one instance of this game can be run at a time.", "Error", MB_ICONERROR);
-			return 1;
-		}
-	}
+        if (dwStatus && dwStatus != WAIT_ABANDONED)
+        {
+            MessageBoxA(NULL, "Could not launch game.\nOnly one instance of this game can be run at a time.", "Error", MB_ICONERROR);
+            return 1;
+        }
+    }
 #endif
 
-	WSAData WSAData;
-	WSAStartup(0x202, &WSAData);
+    WSAData WSAData;
+    WSAStartup(0x202, &WSAData);
 
-	registry->Init();
+    registry->Init();
 
-	char szFullExePath[MAX_PATH];
-	Sys_GetExecutableName(szFullExePath, MAX_PATH);
+    char szFullExePath[MAX_PATH];
+    Sys_GetExecutableName(szFullExePath, MAX_PATH);
 
-	char* pszExeFullName = COM_SkipPath(szFullExePath);
+    char* pszExeFullName = COM_SkipPath(szFullExePath);
 
-	char szFullPath[MAX_PATH];
-	strncpy(szFullPath, szFullExePath, pszExeFullName - szFullExePath);
-	szFullPath[pszExeFullName - szFullExePath] = 0;
+    char szFullPath[MAX_PATH];
+    strncpy(szFullPath, szFullExePath, pszExeFullName - szFullExePath);
+    szFullPath[pszExeFullName - szFullExePath] = 0;
 
-	char szExeBaseName[MAX_PATH];
-	COM_FileBase(pszExeFullName, szExeBaseName);
+    char szExeBaseName[MAX_PATH];
+    COM_FileBase(pszExeFullName, szExeBaseName);
 
-	if (CommandLine()->CheckParm("-game") == NULL)
-	{
-		if (0 == stricmp(szExeBaseName, "svencoop"))
-		{
-			CommandLine()->AppendParm("-game", "svencoop");
-		}
-		if (0 == stricmp(szExeBaseName, "hl"))
-		{
-			CommandLine()->AppendParm("-game", "valve");
-		}
-		else
-		{
-			CommandLine()->AppendParm("-game", szExeBaseName);
-		}
-	}
+    if (CommandLine()->CheckParm("-game") == NULL)
+    {
+        if (0 == stricmp(szExeBaseName, "svencoop"))
+        {
+            CommandLine()->AppendParm("-game", "svencoop");
+        }
+        if (0 == stricmp(szExeBaseName, "hl"))
+        {
+            CommandLine()->AppendParm("-game", "valve");
+        }
+        else
+        {
+            CommandLine()->AppendParm("-game", szExeBaseName);
+        }
+    }
 
-	char szGameName[32] = { 0 };
-	const char *pszGameName = NULL;
-	const char *szGameStr = CommandLine()->CheckParm("-game", &pszGameName);
+    char        szGameName[32] = {0};
+    const char* pszGameName    = NULL;
+    const char* szGameStr      = CommandLine()->CheckParm("-game", &pszGameName);
 
-	strncpy(szGameName, (pszGameName) ? pszGameName : "valve", sizeof(szGameName) - 1);
-	szGameName[sizeof(szGameName) - 1] = 0;
+    strncpy(szGameName, (pszGameName) ? pszGameName : "valve", sizeof(szGameName) - 1);
+    szGameName[sizeof(szGameName) - 1] = 0;
 
-	//"czero" or "czeror"
-	if (pszGameName && 0 == strnicmp(pszGameName, "czero", sizeof("czero") - 1))
-		CommandLine()->AppendParm("-forcevalve", NULL);
+    //"czero" or "czeror"
+    if (pszGameName && 0 == strnicmp(pszGameName, "czero", sizeof("czero") - 1))
+        CommandLine()->AppendParm("-forcevalve", NULL);
 
-	// see https://github.com/libsdl-org/sdl2-compat/issues/400
-	SetEnvironmentVariableA("SDL_HINT_MOUSE_EMULATE_WARP_WITH_RELATIVE", "0");
-	SetEnvironmentVariableA("SDL_MOUSE_EMULATE_WARP_WITH_RELATIVE", "0");
+    // see https://github.com/libsdl-org/sdl2-compat/issues/400
+    SetEnvironmentVariableA("SDL_HINT_MOUSE_EMULATE_WARP_WITH_RELATIVE", "0");
+    SetEnvironmentVariableA("SDL_MOUSE_EMULATE_WARP_WITH_RELATIVE", "0");
 
-	if (registry->ReadInt("CrashInitializingVideoMode", FALSE))
-	{
-		registry->WriteInt("CrashInitializingVideoMode", FALSE);
+    if (registry->ReadInt("CrashInitializingVideoMode", FALSE))
+    {
+        registry->WriteInt("CrashInitializingVideoMode", FALSE);
 
-		auto hw = registry->ReadString("EngineDLL", "hw.dll");
+        auto hw = registry->ReadString("EngineDLL", "hw.dll");
 
-		if (hw[0] && 0 != strcmp(hw, "hw.dll"))
-		{
-			if (registry->ReadInt("EngineD3D", FALSE))
-			{
-				registry->WriteInt("EngineD3D", FALSE);
+        if (hw[0] && 0 != strcmp(hw, "hw.dll"))
+        {
+            if (registry->ReadInt("EngineD3D", FALSE))
+            {
+                registry->WriteInt("EngineD3D", FALSE);
 
-				if (MessageBoxA(NULL, "The game has detected that the previous attempt to start in D3D video mode failed.\nThe game will now run attempt to run in openGL mode.", "Video mode change failure", MB_OKCANCEL | MB_ICONWARNING) != IDOK)
-					return 1;
-			}
-			else
-			{
-				registry->WriteString("EngineDLL", "sw.dll");
+                if (MessageBoxA(NULL, "The game has detected that the previous attempt to start in D3D video mode failed.\nThe game will now run attempt to run in openGL mode.", "Video mode change failure", MB_OKCANCEL | MB_ICONWARNING) != IDOK)
+                    return 1;
+            }
+            else
+            {
+                registry->WriteString("EngineDLL", "sw.dll");
 
-				if (MessageBoxA(NULL, "The game has detected that the previous attempt to start in openGL video mode failed.\nThe game will now run in software mode.", "Video mode change failure", MB_OKCANCEL | MB_ICONWARNING) != IDOK)
-					return 1;
-			}
+                if (MessageBoxA(NULL, "The game has detected that the previous attempt to start in openGL video mode failed.\nThe game will now run in software mode.", "Video mode change failure", MB_OKCANCEL | MB_ICONWARNING) != IDOK)
+                    return 1;
+            }
 
-			registry->WriteInt("ScreenWidth", 640);
-			registry->WriteInt("ScreenHeight", 480);
-			registry->WriteInt("ScreenBPP", 32);
-		}
-	}
+            registry->WriteInt("ScreenWidth", 640);
+            registry->WriteInt("ScreenHeight", 480);
+            registry->WriteInt("ScreenBPP", 32);
+        }
+    }
 
-	while (1)
-	{
-		HINTERFACEMODULE hFileSystem = LoadFileSystemModule();
+    while (1)
+    {
+        HINTERFACEMODULE hFileSystem = LoadFileSystemModule();
 
-		if (!hFileSystem)
-			break;
+        if (!hFileSystem)
+            break;
 
-		CScopedExitFileSystem ScopedExitFileSystem(hFileSystem);
+        CScopedExitFileSystem ScopedExitFileSystem(hFileSystem);
 
-		const char *pszEngineDLL = NULL;
-		int iResult = ENGINE_RESULT_NONE;
+        const char* pszEngineDLL = NULL;
+        int         iResult      = ENGINE_RESULT_NONE;
 
-		SetEngineDLL(pszExeFullName, &pszEngineDLL);
+        SetEngineDLL(pszExeFullName, &pszEngineDLL);
 
-		memset(szNewCommandParams, 0, sizeof(szNewCommandParams));
+        memset(szNewCommandParams, 0, sizeof(szNewCommandParams));
 
-		IEngineAPI *EngineAPI = NULL;
-		HINTERFACEMODULE hEngine = NULL;
-		BlobHandle_t hBlobEngine = NULL;
-		HMEMORYMODULE hMirroredEngine = NULL;
+        IEngineAPI*      EngineAPI       = NULL;
+        HINTERFACEMODULE hEngine         = NULL;
+        BlobHandle_t     hBlobEngine     = NULL;
+        HMEMORYMODULE    hMirroredEngine = NULL;
 
-		if (FIsBlob(pszEngineDLL))
-		{
+        if (FIsBlob(pszEngineDLL))
+        {
 #if defined(METAHOOK_BLOB_SUPPORT)
-			if (!g_BlobLoaderSectionBase)
-			{
-				g_BlobLoaderSectionBase = GetBlobLoaderSection((PVOID)hInstance, &g_BlobLoaderSectionSize);
+            if (!g_BlobLoaderSectionBase)
+            {
+                g_BlobLoaderSectionBase = GetBlobLoaderSection((PVOID)hInstance, &g_BlobLoaderSectionSize);
 
-				if (!g_BlobLoaderSectionBase)
-				{
-					MH_SysError("No available \".blob\" section to load blob engine : %s.", pszEngineDLL);
-					return 1;
-				}
-				else
-				{
-					DWORD dwOldProtect = 0;
-					if (!VirtualProtect(g_BlobLoaderSectionBase, g_BlobLoaderSectionSize, PAGE_EXECUTE_READWRITE, &dwOldProtect))
-					{
-						MH_SysError("Failed to make \".blob\" section executable for blob engine : %s.", pszEngineDLL);
-						return 1;
-					}
-				}
-			}
+                if (!g_BlobLoaderSectionBase)
+                {
+                    MH_SysError("No available \".blob\" section to load blob engine : %s.", pszEngineDLL);
+                    return 1;
+                }
+                else
+                {
+                    DWORD dwOldProtect = 0;
+                    if (!VirtualProtect(g_BlobLoaderSectionBase, g_BlobLoaderSectionSize, PAGE_EXECUTE_READWRITE, &dwOldProtect))
+                    {
+                        MH_SysError("Failed to make \".blob\" section executable for blob engine : %s.", pszEngineDLL);
+                        return 1;
+                    }
+                }
+            }
 #else
-			if (1)
-			{
-				MH_SysError("This build of metahook does not support blob engine : %s.\nPlease use metahook_blob.exe instead.", pszEngineDLL);
-				return 1;
-			}
+            if (1)
+            {
+                MH_SysError("This build of metahook does not support blob engine : %s.\nPlease use metahook_blob.exe instead.", pszEngineDLL);
+                return 1;
+            }
 #endif
-			hBlobEngine = LoadBlobFile(pszEngineDLL, g_BlobLoaderSectionBase, g_BlobLoaderSectionSize);
+            hBlobEngine = LoadBlobFile(pszEngineDLL, g_BlobLoaderSectionBase, g_BlobLoaderSectionSize);
 
-			if (!hBlobEngine)
-			{
-				MH_SysError("Could not load engine : %s.", pszEngineDLL);
-				return 1;
-			}
+            if (!hBlobEngine)
+            {
+                MH_SysError("Could not load engine : %s.", pszEngineDLL);
+                return 1;
+            }
 
-			if (hBlobEngine)
-			{
-				BlobLoaderAddBlob(hBlobEngine);
-				RunDllMainForBlob(hBlobEngine, DLL_PROCESS_ATTACH);
-				RunExportEntryForBlob(hBlobEngine, (void**)&EngineAPI);
+            if (hBlobEngine)
+            {
+                BlobLoaderAddBlob(hBlobEngine);
+                RunDllMainForBlob(hBlobEngine, DLL_PROCESS_ATTACH);
+                RunExportEntryForBlob(hBlobEngine, (void**)&EngineAPI);
 
-				if (!EngineAPI)
-				{
-					MH_SysError("Could not get EngineAPI from engine : %s.", pszEngineDLL);
-					return 1;
-				}
-			}
-		}
-		else
-		{
-			hEngine = Sys_LoadModule(pszEngineDLL);
+                if (!EngineAPI)
+                {
+                    MH_SysError("Could not get EngineAPI from engine : %s.", pszEngineDLL);
+                    return 1;
+                }
+            }
+        }
+        else
+        {
+            hEngine = Sys_LoadModule(pszEngineDLL);
 
-			if (!hEngine)
-			{
-				MH_SysError("Could not load engine : %s.", pszEngineDLL);
-				return 1;
-			}
+            if (!hEngine)
+            {
+                MH_SysError("Could not load engine : %s.", pszEngineDLL);
+                return 1;
+            }
 
-			CreateInterfaceFn EngineFactory = (CreateInterfaceFn)Sys_GetFactory(hEngine);
+            CreateInterfaceFn EngineFactory = (CreateInterfaceFn)Sys_GetFactory(hEngine);
 
-			if (!EngineFactory)
-			{
-				MH_SysError("Could not get factory from engine : %s.", pszEngineDLL);
-				return 1;
-			}
+            if (!EngineFactory)
+            {
+                MH_SysError("Could not get factory from engine : %s.", pszEngineDLL);
+                return 1;
+            }
 
-			EngineAPI = (IEngineAPI *)EngineFactory(VENGINE_LAUNCHER_API_VERSION, NULL);
+            EngineAPI = (IEngineAPI*)EngineFactory(VENGINE_LAUNCHER_API_VERSION, NULL);
 
-			if (!EngineAPI)
-			{
-				MH_SysError("Could not get EngineAPI from engine : %s.", pszEngineDLL);
-				return 1;
-			}
-		}
+            if (!EngineAPI)
+            {
+                MH_SysError("Could not get EngineAPI from engine : %s.", pszEngineDLL);
+                return 1;
+            }
+        }
 
-		if (EngineAPI)
-		{
-			MH_LoadEngine((HMODULE)hEngine, hBlobEngine, szGameName, szFullPath, pszEngineDLL);
+        if (EngineAPI)
+        {
+            MH_LoadEngine((HMODULE)hEngine, hBlobEngine, szGameName, szFullPath, pszEngineDLL);
 
-			iResult = EngineAPI->Run(hInstance, Sys_GetLongPathName(), CommandLine()->GetCmdLine(), szNewCommandParams, Sys_GetFactoryThis(), Sys_GetFactory(hFileSystem));
+            iResult = EngineAPI->Run(hInstance, Sys_GetLongPathName(), CommandLine()->GetCmdLine(), szNewCommandParams, Sys_GetFactoryThis(), Sys_GetFactory(hFileSystem));
 
-			MH_ExitGame(iResult);
-			
-			if (hBlobEngine)
-			{
-				MH_DispatchLoadBlobNotificationCallback(hBlobEngine, LOAD_DLL_NOTIFICATION_IS_UNLOAD);
-				FreeBlobModule(hBlobEngine);
-				BlobLoaderRemoveBlob(hBlobEngine);
-			}
-			else
-			{
-				MH_DispatchLoadLdrDllNotificationCallback(NULL, NULL, MH_GetEngineBase(), MH_GetEngineSize(), LOAD_DLL_NOTIFICATION_IS_UNLOAD);
-				Sys_FreeModule(hEngine);
-			}
+            MH_ExitGame(iResult);
 
-			MH_Shutdown();
-		}
+            if (hBlobEngine)
+            {
+                MH_DispatchLoadBlobNotificationCallback(hBlobEngine, LOAD_DLL_NOTIFICATION_IS_UNLOAD);
+                FreeBlobModule(hBlobEngine);
+                BlobLoaderRemoveBlob(hBlobEngine);
+            }
+            else
+            {
+                MH_DispatchLoadLdrDllNotificationCallback(NULL, NULL, MH_GetEngineBase(), MH_GetEngineSize(), LOAD_DLL_NOTIFICATION_IS_UNLOAD);
+                Sys_FreeModule(hEngine);
+            }
 
-		if (iResult == ENGINE_RESULT_NONE || iResult > ENGINE_RESULT_UNSUPPORTEDVIDEO)
-			break;
+            MH_Shutdown();
+        }
 
-		bool bContinue = false;
+        if (iResult == ENGINE_RESULT_NONE || iResult > ENGINE_RESULT_UNSUPPORTEDVIDEO)
+            break;
 
-		switch (iResult)
-		{
-			case ENGINE_RESULT_RESTART:
-			{
-				bContinue = true;
-				break;
-			}
+        bool bContinue = false;
 
-			case ENGINE_RESULT_UNSUPPORTEDVIDEO:
-			{
-				registry->WriteInt("ScreenWidth", 640);
-				registry->WriteInt("ScreenHeight", 480);
-				registry->WriteInt("ScreenBPP", 16);
-				registry->WriteString("EngineDLL", "sw.dll");
+        switch (iResult)
+        {
+            case ENGINE_RESULT_RESTART:
+            {
+                bContinue = true;
+                break;
+            }
 
-				bContinue = MessageBoxA(NULL, "The specified video mode is not supported.\nThe game will now run in software mode.", "Video mode change failure", MB_OKCANCEL | MB_ICONWARNING) != IDOK;
-				break;
-			}
-		}
+            case ENGINE_RESULT_UNSUPPORTEDVIDEO:
+            {
+                registry->WriteInt("ScreenWidth", 640);
+                registry->WriteInt("ScreenHeight", 480);
+                registry->WriteInt("ScreenBPP", 16);
+                registry->WriteString("EngineDLL", "sw.dll");
 
-		CommandLine()->RemoveParm("-sw");
-		CommandLine()->RemoveParm("-startwindowed");
-		CommandLine()->RemoveParm("-windowed");
-		CommandLine()->RemoveParm("-window");
-		CommandLine()->RemoveParm("-full");
-		CommandLine()->RemoveParm("-fullscreen");
-		CommandLine()->RemoveParm("-soft");
-		CommandLine()->RemoveParm("-software");
-		CommandLine()->RemoveParm("-gl");
-		CommandLine()->RemoveParm("-d3d");
-		CommandLine()->RemoveParm("-w");
-		CommandLine()->RemoveParm("-width");
-		CommandLine()->RemoveParm("-h");
-		CommandLine()->RemoveParm("-height");
-		CommandLine()->RemoveParm("-novid");
+                bContinue = MessageBoxA(NULL, "The specified video mode is not supported.\nThe game will now run in software mode.", "Video mode change failure", MB_OKCANCEL | MB_ICONWARNING) != IDOK;
+                break;
+            }
+        }
 
-		if (strstr(szNewCommandParams, "-game"))
-			CommandLine()->RemoveParm("-game");
+        CommandLine()->RemoveParm("-sw");
+        CommandLine()->RemoveParm("-startwindowed");
+        CommandLine()->RemoveParm("-windowed");
+        CommandLine()->RemoveParm("-window");
+        CommandLine()->RemoveParm("-full");
+        CommandLine()->RemoveParm("-fullscreen");
+        CommandLine()->RemoveParm("-soft");
+        CommandLine()->RemoveParm("-software");
+        CommandLine()->RemoveParm("-gl");
+        CommandLine()->RemoveParm("-d3d");
+        CommandLine()->RemoveParm("-w");
+        CommandLine()->RemoveParm("-width");
+        CommandLine()->RemoveParm("-h");
+        CommandLine()->RemoveParm("-height");
+        CommandLine()->RemoveParm("-novid");
 
-		if (strstr(szNewCommandParams, "+load"))
-			CommandLine()->RemoveParm("+load");
+        if (strstr(szNewCommandParams, "-game"))
+            CommandLine()->RemoveParm("-game");
 
-		CommandLine()->AppendParm(szNewCommandParams, NULL);
+        if (strstr(szNewCommandParams, "+load"))
+            CommandLine()->RemoveParm("+load");
 
-		if (!bContinue)
-			break;
-	}
+        CommandLine()->AppendParm(szNewCommandParams, NULL);
 
-	registry->Shutdown();
+        if (!bContinue)
+            break;
+    }
 
-	if (hObject)
-	{
-		ReleaseMutex(hObject);
-		CloseHandle(hObject);
-	}
+    registry->Shutdown();
 
-	WSACleanup();
+    if (hObject)
+    {
+        ReleaseMutex(hObject);
+        CloseHandle(hObject);
+    }
 
-	return 0;
+    WSACleanup();
+
+    return 0;
 }

@@ -1,0 +1,11 @@
+# Repository-relative exclusions for shared FormatValidation.
+# Only src/, include/, and tests/ are selected; dependencies and artifacts are excluded.
+**/thirdparty/**
+**/build/**
+**/install/**
+
+# Imported Valve SDK trees; keep the MetaHook API and Interface headers in scope.
+include/HLSDK/
+include/SourceSDK/
+include/VGUI/
+include/vgui_controls/
