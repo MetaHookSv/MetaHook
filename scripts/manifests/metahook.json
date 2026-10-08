@@ -30,7 +30,14 @@
     "gClientUserMsgs": "global",
     "cl_parsefuncs": "global"
   },
-  "optionalSymbols": ["cvar_hooks"],
+  "optionalSymbols": {
+    "cvar_hooks": "global",
+    "Sys_InitArgv": "function",
+    "COM_InitArgv": "function",
+    "com_argc": "global",
+    "com_argv": "global",
+    "host_parms": "global"
+  },
   "symbolExemptions": {
     "NLoadBlob": ["svencoop-10257", "svencoop-8948"],
     "FreeBlob": ["svencoop-10257", "svencoop-8948"]

@@ -1,5 +1,6 @@
 #include <interface.h>
 #include "ICommandLine.h"
+#include "StartupCommandLine.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -375,13 +376,10 @@ const char *CCommandLine::CheckParm(const char *psz, const char **ppszValue) con
 
 void CCommandLine::AddArgument(const char *pFirst, const char *pLast)
 {
-	if (pLast == pFirst)
+	if (m_nParmCount >= MAX_PARAMETERS)
 		return;
 
-	if (m_nParmCount >= MAX_PARAMETERS)
-		printf("CCommandLine::AddArgument: exceeded %d parameters", MAX_PARAMETERS);
-
-	int nLen = (int)pLast - (int)pFirst + 1;
+	size_t nLen = pLast - pFirst + 1;
 	m_ppParms[m_nParmCount] = new char [nLen];
 	memcpy(m_ppParms[m_nParmCount], pFirst, nLen - 1);
 	m_ppParms[m_nParmCount][nLen - 1] = 0;
@@ -393,56 +391,9 @@ void CCommandLine::ParseCommandLine(void)
 {
 	CleanUpParms();
 
-	if (!m_pszCmdLine)
-		return;
-
-	const char *pChar = m_pszCmdLine;
-
-	while (*pChar && isspace(*pChar))
-		++pChar;
-
-	bool bInQuotes = false;
-	const char *pFirstLetter = NULL;
-
-	for ( ; *pChar; ++pChar)
+	for (const auto& argument : ParseStartupCommandLine(m_pszCmdLine, MAX_PARAMETERS))
 	{
-		if (bInQuotes)
-		{
-			if (*pChar != '\"')
-				continue;
-
-			AddArgument(pFirstLetter, pChar);
-			pFirstLetter = NULL;
-			bInQuotes = false;
-			continue;
-		}
-
-		if (!pFirstLetter)
-		{
-			if (*pChar == '\"')
-			{
-				bInQuotes = true;
-				pFirstLetter = pChar + 1;
-				continue;
-			}
-
-			if (isspace(*pChar))
-				continue;
-
-			pFirstLetter = pChar;
-			continue;
-		}
-
-		if (isspace(*pChar))
-		{
-			AddArgument(pFirstLetter, pChar);
-			pFirstLetter = NULL;
-		}
-	}
-
-	if (pFirstLetter)
-	{
-		AddArgument(pFirstLetter, pChar);
+		AddArgument(argument.data(), argument.data() + argument.size());
 	}
 }
 

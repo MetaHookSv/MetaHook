@@ -19,6 +19,7 @@
 #include "LoadBlob.h"
 #include "LoadDllNotification.h"
 #include "GameData.h"
+#include "EngineStartupArguments.h"
 
 extern PVOID g_BlobLoaderSectionBase;
 extern ULONG g_BlobLoaderSectionSize;
@@ -109,6 +110,12 @@ void(*g_pfnClientDLL_HudInit_Original)(void) = NULL;
 void(*g_pfnCvar_DirectSet)(cvar_t* var, char* value) = NULL;
 void(*g_pfnNLoadBlob)(BYTE* pBuffer, void** pBlobFootprint, void** pv, DWORD dwBufferSize) = NULL; //This is actually called NLoadBlob
 void(*g_pfnFreeBlob)(void** pBlobFootprint) = NULL;
+
+static void (*g_pfnCOM_InitArgv)(int argc, const char** argv) = NULL;
+static int* g_pComArgc = NULL;
+static const char*** g_pComArgv = NULL;
+static void* g_pHostParms = NULL;
+static EngineStartupArguments g_EngineStartupArguments;
 
 CreateInterfaceFn* g_pClientFactory = NULL;
 HMODULE* g_phClientModule = NULL;
@@ -1228,6 +1235,11 @@ int ClientDLL_Initialize(struct cl_enginefuncs_s* pEnginefuncs, int iVersion)
 
 void MH_ResetAllVars(void)
 {
+	g_pfnCOM_InitArgv = NULL;
+	g_pComArgc = NULL;
+	g_pComArgv = NULL;
+	g_pHostParms = NULL;
+	g_EngineStartupArguments.Clear();
 	Cmd_GetCmdBase = NULL;
 	cvar_hooks = NULL;
 	gClientUserMsgs = NULL;
@@ -1329,6 +1341,48 @@ static bool MH_LoadEngine_ResolveSymbol(const char* symbolName, mh_gamesymbol_ki
 
 	MH_LoadEngine_ReportSymbolFailure(symbolName, st);
 	return false;
+}
+
+static void MH_Sys_InitArgv(const char* commandLine)
+{
+	if (g_iEngineType == ENGINE_SVENGINE)
+	{
+		g_EngineStartupArguments.Initialize(commandLine, *static_cast<quakeparms_svengine_t*>(g_pHostParms),
+			g_pfnCOM_InitArgv, *g_pComArgc, *g_pComArgv);
+	}
+	else
+	{
+		g_EngineStartupArguments.Initialize(commandLine, *static_cast<quakeparms_t*>(g_pHostParms),
+			g_pfnCOM_InitArgv, *g_pComArgc, *g_pComArgv);
+	}
+}
+
+static bool MH_LoadEngine_HookSysInitArgv(void)
+{
+	// Older catalogs may not yet provide this optional engine fix.
+	const auto status = MH_IsGameSymbolAvailable(g_dwEngineBase, "Sys_InitArgv");
+	if (status == MH_GAMESYMBOL_SYMBOL_NOT_FOUND)
+		return true;
+	if (status != MH_GAMESYMBOL_OK)
+	{
+		MH_LoadEngine_ReportSymbolFailure("Sys_InitArgv", status);
+		return false;
+	}
+
+	PVOID sysInitArgv = NULL;
+	if (!MH_LoadEngine_ResolveSymbol("Sys_InitArgv", MH_GAMESYMBOL_KIND_FUNCTION, &sysInitArgv) ||
+		!MH_LoadEngine_ResolveSymbol("COM_InitArgv", MH_GAMESYMBOL_KIND_FUNCTION, (PVOID*)&g_pfnCOM_InitArgv) ||
+		!MH_LoadEngine_ResolveSymbol("com_argc", MH_GAMESYMBOL_KIND_GLOBAL, (PVOID*)&g_pComArgc) ||
+		!MH_LoadEngine_ResolveSymbol("com_argv", MH_GAMESYMBOL_KIND_GLOBAL, (PVOID*)&g_pComArgv) ||
+		!MH_LoadEngine_ResolveSymbol("host_parms", MH_GAMESYMBOL_KIND_GLOBAL, &g_pHostParms))
+		return false;
+
+	if (!MH_InlineHook(sysInitArgv, MH_Sys_InitArgv, NULL))
+	{
+		MH_SysError("MH_LoadEngine: Failed to hook Sys_InitArgv");
+		return false;
+	}
+	return true;
 }
 
 // Map a catalog gameVersion to an engine family. Only gameVersions whose prefix
@@ -1764,6 +1818,9 @@ void MH_LoadEngine(HMODULE hEngineModule, BlobHandle_t hBlobEngine, const char* 
 		return;
 
 	if (!MH_LoadEngine_FindLoadBlobClient())
+		return;
+
+	if (!MH_LoadEngine_HookSysInitArgv())
 		return;
 
 	// Redirect ClientDLL_Init's indirect call through our wrapper. cl_funcs is
