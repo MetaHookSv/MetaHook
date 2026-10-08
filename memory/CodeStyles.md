@@ -6,7 +6,7 @@ permalink: metahook/code-styles
 
 # MetaHook code conventions
 
-Adapted from MetaHookSv's `CodeStyles.md`. Follow the exact local file style; the inherited source mixes conventions, so these are guidance rather than reasons for broad formatting changes.
+Adapted from MetaHookSv's `CodeStyles.md`. Owned C/C++ sources now follow the shared DiligentCore style from MetaHookSv/FormatValidation, pinned to clang-format 23.1.3.
 
 ## Naming and organization
 
@@ -18,7 +18,9 @@ Adapted from MetaHookSv's `CodeStyles.md`. Follow the exact local file style; th
 
 ## Formatting and comments
 
-- Existing C++ mostly uses tabs and local brace conventions; new CMake uses four-space indentation.
+- C/C++ uses four-space indentation and the shared brace/alignment rules. CMake also uses four spaces.
+- Configure with `-DFORMAT_VALIDATION_ONLY=ON`, then build `format-check` or `format`. CMake generates the ignored `.clang-format` for editors; change the shared configuration instead of that copy.
+- External Valve SDK trees remain excluded through `.clang-format-ignore`; MetaHook's own API and Interface headers are checked.
 - Match the surrounding comment language and style. Explain non-obvious behavior and ownership/lifetime constraints.
 - Include order can be semantic: Chocobo1Hash headers precede Windows headers in `GameData.cpp` to avoid `min`/`max` macro conflicts. Do not mechanically reorder includes.
 - Keep changes local; source migration is not a reason to reformat unrelated code or third-party sources.

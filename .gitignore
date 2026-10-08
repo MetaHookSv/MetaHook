@@ -8,3 +8,6 @@
 *.user
 __pycache__/
 *.pyc
+
+# Generated from the shared FormatValidation source during CMake configuration.
+/.clang-format
