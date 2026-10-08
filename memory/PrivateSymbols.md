@@ -37,6 +37,8 @@ This document inventories the unexported private functions, private data slots, 
 | `g_pfnCvar_DirectSet` (`Cvar_DirectSet`) | function | `ResolveGameSymbol("Cvar_DirectSet", FUNCTION)`; required for every engine family. | Called by `MH_Cvar_DirectSet`; on the managed cvar path, `Cvar_Set` call sites are redirected to it. |
 | `g_pfnNLoadBlob` (`NLoadBlob`) | function | Required for GoldSrc / Blob / HL25 / CoF. For SvEngine it may be absent, but only together with `FreeBlob`. | `MH_InlineHook` installs `MH_NLoadBlob`. |
 | `g_pfnFreeBlob` (`FreeBlob`) | function | Same requiredness rule as `NLoadBlob` (pairwise on SvEngine). | `MH_InlineHook` installs `MH_FreeBlobProxy`. |
+| `Sys_InitArgv` | function | Optional existence probe; resolve as FUNCTION when present. | `MH_LoadEngine_HookSysInitArgv` installs `MH_Sys_InitArgv` before the engine runs. Absent symbols leave the original parser intact. |
+| `g_pfnCOM_InitArgv` (`COM_InitArgv`) | function | Required FUNCTION when the `Sys_InitArgv` hook is available. | Retains the engine's cmdline reconstruction, argument storage and engine-specific `-safe` handling. |
 
 ## Private variables and internal tables
 
@@ -51,6 +53,15 @@ This document inventories the unexported private functions, private data slots, 
 | `gClientUserMsgs` (`usermsg_t **`, user-message linked-list head slot) | global | `ResolveGameSymbol("gClientUserMsgs", GLOBAL)` | Dereferenced to walk/hook user messages. |
 | `cl_parsefuncs` (`svc_func_t *`, SVC parse-function table base) | global | `ResolveGameSymbol("cl_parsefuncs", GLOBAL)` | Returned as the table base and queried or replaced by opcode/name. |
 | `cvar_hooks` (`cvar_callback_entry_t **`, cvar callback linked-list head slot) | global | Native path: `ResolveGameSymbol("cvar_hooks", GLOBAL)` when the catalog has it. Managed path: MetaHook's own `g_ManagedCvarCallbackList`. | Walked/inserted by the cvar callback hooks; cleared on shutdown. The managed branch is not a game variable. |
+| `g_pComArgc` / `g_pComArgv` (`com_argc` / `com_argv`) | global | Required GLOBALs when the `Sys_InitArgv` hook is available. | Addresses of the integer and pointer variable respectively; read after `COM_InitArgv` and copy into `host_parms`. |
+| `g_pHostParms` (`host_parms`) | global | Required GLOBAL when the `Sys_InitArgv` hook is available. | Direct object address. GoldSrc uses `quakeparms_t`; SvEngine uses separate `quakeparms_svengine_t`, which omits `cachedir`. |
+
+## Startup argument ownership
+
+- `src/StartupCommandLine.h` shares literal-backslash, quote-aware tokenization between the launcher and the engine hook without changing `ICommandLine`'s ABI.
+- `src/EngineStartupArguments.h` owns engine strings independently of the launcher's mutable command line. It reserves empty `argv[0]`, accepts at most 49 command-line tokens, and lets the original `COM_InitArgv` finalize the arguments. Its reconstructed cmdline buffer retains the engine's own limit; token strings do not use that buffer.
+- The hook initializes the appropriate `host_parms` layout before calling `COM_InitArgv`, then reads final `com_argc` / `com_argv` through references. Storage survives until the next initialization or `MH_ResetAllVars` after engine shutdown; pointers are reset with it.
+- All five symbols are retained as optional manifest entries for compatibility with older catalogs. Once `Sys_InitArgv` exists, missing dependencies or resolution errors use the normal failure diagnostic instead of scanning or partially installing a hook.
 
 ## cvar callback branch: native list or managed call-site redirect
 

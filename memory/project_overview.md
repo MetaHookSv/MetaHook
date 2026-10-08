@@ -68,6 +68,7 @@ flowchart TD
 - `src/LoadBlob.cpp`, `src/LoadBlob.h`: blob validation, decoding, loading/unloading, blob queries and blob IAT hooks.
 - `src/LoadDllNotification.cpp`, `src/LoadDllNotification.h`: DLL load/unload notification registration and dispatch.
 - `src/commandline.cpp`: command-line parsing and rewriting, including `@file` argument expansion.
+- `src/StartupCommandLine.h`, `src/EngineStartupArguments.h`: shared quote-aware tokenization, persistent engine argv storage and distinct GoldSrc/SvEngine startup parameter layouts; wired into `Sys_InitArgv` by `metahook.cpp`.
 - `src/registry.cpp`: wrapper for `HKCU\Software\Valve\Half-Life\Settings`.
 - `src/sys_launcher.cpp`, `src/sys.h`: executable-path and long-path helpers.
 - `src/Z.cpp`: `g_pBlobBuffer` placeholder that materializes the `.blob` section (blob target only).
