@@ -2,7 +2,7 @@
 #define IENGINEVGUI_H
 
 #ifdef _WIN32
-#pragma once
+#    pragma once
 #endif
 
 #include <vgui/VGUI.h>
@@ -13,17 +13,17 @@ namespace vgui
 
 enum VGUIPANEL
 {
-	PANEL_ROOT = 0,
-	PANEL_CLIENTDLL,
-	PANEL_GAMEUIDLL
+    PANEL_ROOT = 0,
+    PANEL_CLIENTDLL,
+    PANEL_GAMEUIDLL
 };
 
 class IEngineVGui : public IBaseInterface
 {
 public:
-	virtual VPANEL GetPanel(VGUIPANEL type) = 0;
+    virtual VPANEL GetPanel(VGUIPANEL type) = 0;
 };
-}
+} // namespace vgui
 
 #define VENGINE_VGUI_VERSION "VEngineVGui001"
 

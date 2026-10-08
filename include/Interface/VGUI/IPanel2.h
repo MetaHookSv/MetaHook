@@ -1,6 +1,6 @@
 //========= Copyright ?1996-2005, Valve Corporation, All rights reserved. ============//
 //
-// Purpose: 
+// Purpose:
 //
 // $NoKeywords: $
 //=============================================================================//
@@ -9,7 +9,7 @@
 #define IPANEL2_H
 
 #ifdef _WIN32
-#pragma once
+#    pragma once
 #endif
 
 #include "VGUI.h"
@@ -26,9 +26,9 @@ namespace vgui
 class IPanel2 : public IPanel
 {
 public:
-	virtual bool IsTopmostPopup(VPANEL vguiPanel) = 0;
-	virtual void SetTopmostPopup(VPANEL vguiPanel, bool state) = 0;
-	virtual bool IsFullyVisible(VPANEL vguiPanel) = 0;
+    virtual bool IsTopmostPopup(VPANEL vguiPanel)              = 0;
+    virtual void SetTopmostPopup(VPANEL vguiPanel, bool state) = 0;
+    virtual bool IsFullyVisible(VPANEL vguiPanel)              = 0;
 };
 
 #define VGUI_PANEL2_INTERFACE_VERSION "VGUI_Panel2_007"
