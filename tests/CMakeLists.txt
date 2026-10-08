@@ -30,14 +30,10 @@ target_include_directories(blob_import_tests PRIVATE
     "${METAHOOK_ROOT}/include/HLSDK/public")
 add_test(NAME blob_imports COMMAND blob_import_tests)
 
-add_executable(commandline_tests commandline_tests.cpp)
+add_executable(commandline_tests commandline_tests.cpp commandline_legacy_abi.cpp
+    "${METAHOOK_ROOT}/src/commandline.cpp")
 target_compile_features(commandline_tests PRIVATE cxx_std_20)
 target_compile_options(commandline_tests PRIVATE /wd4996)
 target_include_directories(commandline_tests PRIVATE
     "${METAHOOK_ROOT}/include/Interface" "${METAHOOK_ROOT}/include/HLSDK/common")
 add_test(NAME commandline COMMAND commandline_tests)
-
-add_executable(engine_startup_arguments_tests engine_startup_arguments_tests.cpp)
-target_compile_features(engine_startup_arguments_tests PRIVATE cxx_std_20)
-target_compile_options(engine_startup_arguments_tests PRIVATE /UNDEBUG)
-add_test(NAME engine_startup_arguments COMMAND engine_startup_arguments_tests)

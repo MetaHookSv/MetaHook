@@ -167,6 +167,13 @@ disabled, as in the original launcher project. Neither prevented a build.
 - Game verification: the Release test launcher ran HL 10210 / Condition Zero with both `-game "czero"` and `-game czero`. Both executed a uniquely named cfg present only under `czero`, printed `MH_ARGV_CZERO_MOUNT_VERIFIED`, and exited 0 via `+quit`. This verifies actual mod mounting and `+exec` handling. Temporary launcher/cfg/log files were removed; the original launcher was not overwritten. Updated game gamedata was retained, with previous overwritten files backed up under `build/issue7-game-backup/`.
 - Scope: startup and content mounting only; no map/gameplay check. Startup logs contain Renderer allocation warnings. Evidence: `build/issue7-{debug,release}.log`, `build/issue7-{quoted,unquoted}-mount.log`, `build/pr346-native-review.log` and the local verification harnesses in `build/`.
 
+## ICommandLine argv API follow-up (2026-10-08)
+
+- Trigger/constraint: the separate engine argument owner duplicated responsibilities already present in `CCommandLine`. Following HLND commits `f8e8316dda246b1fba5f3fa11b1a2f858950a494` and `e129cf198dd4f9ba82025204146235b64cae1024`, new virtual methods must be appended to keep existing plugin slots stable.
+- Implementation: append `GetArgc/GetArgv`, expose the existing parsed argument array, and let `MH_Sys_InitArgv` use it directly. Move the two engine-private layouts into `metahook.cpp`; remove the separate storage/parser headers and class-specific tests. Copy `CreateCmdLine` input before releasing old storage so self-aliasing is safe. Public argv pointers are valid until mutation, as in the reference interface.
+- Verification: normal Win32 Debug/Release build-and-install entrypoints passed for both launchers, including 11-snapshot synchronization/validation. CTest passed 3/3 per configuration. The command-line test now uses the public interface and covers enumeration, query stability, mutations and self-aliasing; a separate translation unit uses the frozen seven-slot legacy interface to exercise every old virtual method.
+- Runtime: both quoted and unquoted `-game czero` launches on HL 10210 executed a czero-only probe and exited 0, with existing compiled plugins present. No map/gameplay test. Evidence: `build/commandline-argv-{debug,release}.log` and `build/argv-api-{quoted,unquoted}-mount.log`. Temporary game test files were removed. The earlier 4/4 and native harness results above describe the previous implementation, not this refactor.
+
 ## Runtime and verification limitations
 
 - Build success does not validate game startup, plugin loading or gameplay.

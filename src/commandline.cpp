@@ -1,6 +1,6 @@
 #include <interface.h>
 #include "ICommandLine.h"
-#include "StartupCommandLine.h"
+#include <string>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +34,8 @@ public:
 
 	virtual void SetParm(const char *pszParm, const char *pszValues);
 	virtual void SetParm(const char *pszParm, int iValue);
+	int GetArgc(void) const override;
+	const char** GetArgv(void) const override;
 
 private:
 	enum
@@ -50,7 +52,7 @@ private:
 private:
 	char *m_pszCmdLine;
 	int m_nParmCount;
-	char *m_ppParms[MAX_PARAMETERS];
+	mutable const char* m_ppParms[MAX_PARAMETERS];
 };
 
 static CCommandLine g_CmdLine;
@@ -152,13 +154,10 @@ void CCommandLine::CreateCmdLine(int argc, char **argv)
 
 void CCommandLine::CreateCmdLine(const char *commandline)
 {
-	if (m_pszCmdLine)
-		delete[] m_pszCmdLine;
-
 	char szFull[4096];
 
 	char *pDst = szFull;
-	const char *pSrc = commandline;
+	const char *pSrc = commandline ? commandline : "";
 
 	bool bInQuotes = false;
 	const char *pInQuotesStart = 0;
@@ -192,8 +191,12 @@ void CCommandLine::CreateCmdLine(const char *commandline)
 	*pDst = '\0';
 
 	size_t len = strlen(szFull) + 1;
-	m_pszCmdLine = new char [len];
-	memcpy(m_pszCmdLine, szFull, len);
+	char* newCmdLine = new char[len];
+	memcpy(newCmdLine, szFull, len);
+	// The input can be GetCmdLine() or one of our parsed argument strings.
+	// Keep both kinds of storage alive until the input has been copied.
+	delete[] m_pszCmdLine;
+	m_pszCmdLine = newCmdLine;
 
 	ParseCommandLine();
 }
@@ -349,6 +352,16 @@ const char *CCommandLine::GetCmdLine(void) const
 	return m_pszCmdLine;
 }
 
+int CCommandLine::GetArgc(void) const
+{
+	return m_nParmCount;
+}
+
+const char** CCommandLine::GetArgv(void) const
+{
+	return m_nParmCount ? m_ppParms : NULL;
+}
+
 const char *CCommandLine::CheckParm(const char *psz, const char **ppszValue) const
 {
 	if (ppszValue)
@@ -380,9 +393,10 @@ void CCommandLine::AddArgument(const char *pFirst, const char *pLast)
 		return;
 
 	size_t nLen = pLast - pFirst + 1;
-	m_ppParms[m_nParmCount] = new char [nLen];
-	memcpy(m_ppParms[m_nParmCount], pFirst, nLen - 1);
-	m_ppParms[m_nParmCount][nLen - 1] = 0;
+	char* argument = new char[nLen];
+	memcpy(argument, pFirst, nLen - 1);
+	argument[nLen - 1] = 0;
+	m_ppParms[m_nParmCount] = argument;
 
 	++m_nParmCount;
 }
@@ -391,8 +405,31 @@ void CCommandLine::ParseCommandLine(void)
 {
 	CleanUpParms();
 
-	for (const auto& argument : ParseStartupCommandLine(m_pszCmdLine, MAX_PARAMETERS))
+	if (!m_pszCmdLine)
+		return;
+
+	// Startup arguments use literal backslashes, not Windows CRT escape rules.
+	const auto isSeparator = [](unsigned char c) { return c <= ' ' || c == 127; };
+	const char* cursor = m_pszCmdLine;
+	while (*cursor && m_nParmCount < MAX_PARAMETERS)
 	{
+		while (*cursor && isSeparator(static_cast<unsigned char>(*cursor)))
+			++cursor;
+		if (!*cursor)
+			break;
+
+		std::string argument;
+		bool inQuotes = false;
+		while (*cursor)
+		{
+			if (*cursor == '"')
+				inQuotes = !inQuotes;
+			else if (!inQuotes && isSeparator(static_cast<unsigned char>(*cursor)))
+				break;
+			else
+				argument += *cursor;
+			++cursor;
+		}
 		AddArgument(argument.data(), argument.data() + argument.size());
 	}
 }

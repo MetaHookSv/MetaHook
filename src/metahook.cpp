@@ -19,7 +19,6 @@
 #include "LoadBlob.h"
 #include "LoadDllNotification.h"
 #include "GameData.h"
-#include "EngineStartupArguments.h"
 
 extern PVOID g_BlobLoaderSectionBase;
 extern ULONG g_BlobLoaderSectionSize;
@@ -90,6 +89,31 @@ typedef struct hook_s
 	tagHOOKDATA HookData;
 }hook_t;
 
+typedef struct quakeparms_s
+{
+	char* basedir;
+	char* cachedir;
+	int argc;
+	const char** argv;
+	void* membase;
+	unsigned int memsize;
+} quakeparms_t;
+
+// SvEngine removed cachedir from the engine-private startup parameters.
+typedef struct quakeparms_svengine_s
+{
+	char* basedir;
+	int argc;
+	const char** argv;
+	void* membase;
+	unsigned int memsize;
+} quakeparms_svengine_t;
+
+static_assert(offsetof(quakeparms_t, argc) == 8);
+static_assert(offsetof(quakeparms_t, argv) == 12);
+static_assert(offsetof(quakeparms_svengine_t, argc) == 4);
+static_assert(offsetof(quakeparms_svengine_t, argv) == 8);
+
 typedef struct cvar_callback_entry_s
 {
 	cvar_callback_t callback;
@@ -115,7 +139,6 @@ static void (*g_pfnCOM_InitArgv)(int argc, const char** argv) = NULL;
 static int* g_pComArgc = NULL;
 static const char*** g_pComArgv = NULL;
 static void* g_pHostParms = NULL;
-static EngineStartupArguments g_EngineStartupArguments;
 
 CreateInterfaceFn* g_pClientFactory = NULL;
 HMODULE* g_phClientModule = NULL;
@@ -1239,7 +1262,6 @@ void MH_ResetAllVars(void)
 	g_pComArgc = NULL;
 	g_pComArgv = NULL;
 	g_pHostParms = NULL;
-	g_EngineStartupArguments.Clear();
 	Cmd_GetCmdBase = NULL;
 	cvar_hooks = NULL;
 	gClientUserMsgs = NULL;
@@ -1345,16 +1367,39 @@ static bool MH_LoadEngine_ResolveSymbol(const char* symbolName, mh_gamesymbol_ki
 
 static void MH_Sys_InitArgv(const char* commandLine)
 {
+	CommandLine()->CreateCmdLine(commandLine);
+
+	// CommandLine owns the strings; this table only adds the engine's reserved
+	// argv[0]. Keep the table alive for the engine session as well.
+	static constexpr int MAX_NUM_ARGVS = 50;
+	static const char* argv[MAX_NUM_ARGVS];
+	int count = 1;
+	argv[0] = "";
+	const char** arguments = CommandLine()->GetArgv();
+	const int argumentCount = CommandLine()->GetArgc();
+	for (int i = 0; i < argumentCount && count < MAX_NUM_ARGVS; ++i)
+		argv[count++] = arguments[i];
+
+	int* hostArgc;
+	const char*** hostArgv;
 	if (g_iEngineType == ENGINE_SVENGINE)
 	{
-		g_EngineStartupArguments.Initialize(commandLine, *static_cast<quakeparms_svengine_t*>(g_pHostParms),
-			g_pfnCOM_InitArgv, *g_pComArgc, *g_pComArgv);
+		auto* hostParms = static_cast<quakeparms_svengine_t*>(g_pHostParms);
+		hostArgc = &hostParms->argc;
+		hostArgv = &hostParms->argv;
 	}
 	else
 	{
-		g_EngineStartupArguments.Initialize(commandLine, *static_cast<quakeparms_t*>(g_pHostParms),
-			g_pfnCOM_InitArgv, *g_pComArgc, *g_pComArgv);
+		auto* hostParms = static_cast<quakeparms_t*>(g_pHostParms);
+		hostArgc = &hostParms->argc;
+		hostArgv = &hostParms->argv;
 	}
+
+	*hostArgc = count;
+	*hostArgv = argv;
+	g_pfnCOM_InitArgv(*hostArgc, *hostArgv);
+	*hostArgc = *g_pComArgc;
+	*hostArgv = *g_pComArgv;
 }
 
 static bool MH_LoadEngine_HookSysInitArgv(void)

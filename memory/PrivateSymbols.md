@@ -58,9 +58,9 @@ This document inventories the unexported private functions, private data slots, 
 
 ## Startup argument ownership
 
-- `src/StartupCommandLine.h` shares literal-backslash, quote-aware tokenization between the launcher and the engine hook without changing `ICommandLine`'s ABI.
-- `src/EngineStartupArguments.h` owns engine strings independently of the launcher's mutable command line. It reserves empty `argv[0]`, accepts at most 49 command-line tokens, and lets the original `COM_InitArgv` finalize the arguments. Its reconstructed cmdline buffer retains the engine's own limit; token strings do not use that buffer.
-- The hook initializes the appropriate `host_parms` layout before calling `COM_InitArgv`, then reads final `com_argc` / `com_argv` through references. Storage survives until the next initialization or `MH_ResetAllVars` after engine shutdown; pointers are reset with it.
+- `src/commandline.cpp` owns the single quote-aware parser and its argument strings. `ICommandLine::GetArgc/GetArgv` are appended after all existing virtual methods, preserving old plugin slots. Queries reuse existing storage; pointers remain valid until the next command-line mutation. New callers require a launcher that implements the appended methods.
+- `MH_Sys_InitArgv` calls `CommandLine()->CreateCmdLine` and uses this argv view directly. A static pointer table reserves empty `argv[0]` and accepts at most 49 command-line tokens; the original `COM_InitArgv` performs finalization. The public parser retains its existing 256-argument limit.
+- The hook selects the appropriate `quakeparms_t` / `quakeparms_svengine_t` members, initializes `host_parms`, then copies back final `com_argc` / `com_argv`. There is no separate engine argument owner; plugins must respect the public view's mutation lifetime. `CreateCmdLine` copies aliased input before freeing old storage, including when the engine receives `CommandLine()->GetCmdLine()` itself.
 - All five symbols are retained as optional manifest entries for compatibility with older catalogs. Once `Sys_InitArgv` exists, missing dependencies or resolution errors use the normal failure diagnostic instead of scanning or partially installing a hook.
 
 ## cvar callback branch: native list or managed call-site redirect
