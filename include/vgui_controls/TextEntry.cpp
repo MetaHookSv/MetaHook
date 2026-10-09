@@ -154,8 +154,8 @@ void TextEntry::ApplySchemeSettings(IScheme *pScheme)
 {
 	BaseClass::ApplySchemeSettings(pScheme);
 	
-	SetFgColor(GetSchemeColor("WindowFgColor", pScheme));
-	SetBgColor(GetSchemeColor("WindowBgColor", pScheme));
+	SetFgColor(GetSchemeColor2("TextEntry.TextColor", GetSchemeColor("WindowFgColor", pScheme), pScheme));
+	SetBgColor(GetSchemeColor2("TextEntry.BgColor", GetSchemeColor("WindowBgColor", pScheme), pScheme));
 	
 	_cursorColor = GetSchemeColor("TextCursorColor", pScheme);
 	_disabledFgColor = GetSchemeColor("WindowDisabledFgColor", pScheme);
@@ -945,12 +945,14 @@ void TextEntry::PaintBackground()
 			x = wide - m_nLangInset;
 		}
 
-		surface()->DrawSetColor( col );
+		// Allow schemes to style the language badge independently of the entry.
+		IScheme *pScheme = scheme()->GetIScheme(GetScheme());
+		surface()->DrawSetColor(GetSchemeColor2("TextEntry.LanguageIDBgColor", col, pScheme));
 
 		surface()->DrawFilledRect( x, 2, x + m_nLangInset-2, tall - 2 );
 
 		saveBgColor[ 3 ] = 255;
-		surface()->DrawSetTextColor( saveBgColor );
+		surface()->DrawSetTextColor(GetSchemeColor2("TextEntry.LanguageIDFgColor", saveBgColor, pScheme));
 
 		x += 1;
 

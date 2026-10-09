@@ -60,9 +60,14 @@ public:
 		SetDefaultBorder(pScheme->GetBorder("ScrollBarButtonBorder"));
         SetDepressedBorder(pScheme->GetBorder("ScrollBarButtonDepressedBorder"));
 		
-		SetDefaultColor(GetSchemeColor("DimBaseText", pScheme), GetBgColor());
-		SetArmedColor(GetFgColor(), GetBgColor());
-		SetDepressedColor(GetFgColor(), GetBgColor());
+		// Prefer control-specific settings; retain the legacy scheme fallbacks.
+		Color fgColor = GetSchemeColor2("ScrollBarButton.FgColor", GetSchemeColor("DimBaseText", pScheme), pScheme);
+		Color bgColor = GetSchemeColor2("ScrollBarButton.BgColor", GetBgColor(), pScheme);
+		SetDefaultColor(fgColor, bgColor);
+		SetArmedColor(GetSchemeColor2("ScrollBarButton.ArmedFgColor", GetFgColor(), pScheme),
+			GetSchemeColor2("ScrollBarButton.ArmedBgColor", GetBgColor(), pScheme));
+		SetDepressedColor(GetSchemeColor2("ScrollBarButton.DepressedFgColor", GetFgColor(), pScheme),
+			GetSchemeColor2("ScrollBarButton.DepressedBgColor", GetBgColor(), pScheme));
 	}
 
 	// Don't request focus.
