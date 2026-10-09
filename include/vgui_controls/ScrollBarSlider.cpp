@@ -294,8 +294,8 @@ void ScrollBarSlider::ApplySchemeSettings(IScheme *pScheme)
 {
 	BaseClass::ApplySchemeSettings(pScheme);
 
-	SetFgColor(GetSchemeColor("ScrollBarSlider/ScrollBarSliderFgColor", pScheme));
-	SetBgColor(GetSchemeColor("ScrollBarSlider/ScrollBarSliderBgColor", pScheme));
+	SetFgColor(GetSchemeColor2("ScrollBarSlider.FgColor", GetSchemeColor("ScrollBarSlider/ScrollBarSliderFgColor", pScheme), pScheme));
+	SetBgColor(GetSchemeColor2("ScrollBarSlider.BgColor", GetSchemeColor("ScrollBarSlider/ScrollBarSliderBgColor", pScheme), pScheme));
 
 	_ScrollBarSliderBorder = pScheme->GetBorder("ButtonBorder");
 }
