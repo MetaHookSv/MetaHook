@@ -69,8 +69,9 @@ bool MH_RedirectFatalError(const char* title, const char* message)
 
 int WINAPI MH_FatalErrorMessageBoxA(HWND window, const char* message, const char* title, UINT flags)
 {
-    const bool error = (flags & MB_ICONMASK) == MB_ICONERROR ||
-        (title && (!_stricmp(title, "Fatal Error") || !_stricmp(title, "Error")));
+    const UINT icon  = flags & MB_ICONMASK;
+    const bool error = icon == MB_ICONERROR ||
+        (!icon && title && (!_stricmp(title, "Fatal Error") || !_stricmp(title, "Error")));
     if ((flags & MB_TYPEMASK) == MB_OK && error && MH_RedirectFatalError(title, message))
         return IDOK;
     return g_pfnFatalErrorMessageBoxA(window, message, title, flags);

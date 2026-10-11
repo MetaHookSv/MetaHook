@@ -52,9 +52,11 @@ int main()
     CHECK(1 == sdlCalls);
 
     CHECK(IDCANCEL == MH_FatalErrorMessageBoxA(nullptr, "warning", "Warning", MB_ICONWARNING));
+    CHECK(IDCANCEL == MH_FatalErrorMessageBoxA(nullptr, "warning", "Error", MB_ICONWARNING));
+    CHECK(IDCANCEL == MH_FatalErrorMessageBoxA(nullptr, "information", "Fatal Error", MB_ICONINFORMATION));
     CHECK(IDCANCEL == MH_FatalErrorMessageBoxA(nullptr, "confirm", "Error", MB_YESNO | MB_ICONERROR));
     CHECK(-7 == MH_FatalErrorSDLMessageBox(0x20, "Warning", "warning", nullptr));
-    CHECK(3 == win32Calls);
+    CHECK(5 == win32Calls);
     CHECK(2 == sdlCalls);
 
     wchar_t executable[MAX_PATH];
@@ -100,7 +102,7 @@ int main()
     CHECK(INVALID_HANDLE_VALUE != lock);
     CHECK(IDOK == MH_FatalErrorMessageBoxA(nullptr, "locked log", "Fatal Error", MB_ICONERROR));
     CHECK(0 == MH_FatalErrorSDLMessageBox(MH_SDL_MESSAGEBOX_ERROR, "Error", "locked log", nullptr));
-    CHECK(3 == win32Calls);
+    CHECK(5 == win32Calls);
     CHECK(2 == sdlCalls);
     CloseHandle(lock);
     CHECK(DeleteFileW(logPath.c_str()));
