@@ -41,6 +41,11 @@ Launching:
 - Plugins are loaded from `<mod>/metahook/configs/plugins.lst`.
 - Plugins are not part of this repository. Install them and their shared
   dependencies under `<mod>/metahook/` separately.
+- Add `-redirect_fatalerror_to_log` to suppress fatal error dialogs and append
+  their title and message to `fatalerror-<datetime>-<pid>.log` beside the launcher.
+  Engine Win32/SDL2 error dialogs are redirected; warnings and confirmation
+  dialogs retain their normal behavior. If the log cannot be written, the error
+  remains silent. The engine's normal fatal-error exit still runs.
 
 ## Documentation
 

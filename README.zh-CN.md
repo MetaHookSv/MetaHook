@@ -31,6 +31,10 @@ MetaHook 是一个用于客户端modding，允许用户为其编写插件的Gold
 - 以命令行传入 `MetaHook.exe -game <mod>`启动；或者直接将`MetaHook.exe`改名为`<mod>.exe`，比如：`MetaHook.exe` -> `svencoop.exe`。
 - 插件从 `<mod>/metahook/configs/plugins.lst` 加载
 - 插件不属于本仓库。请单独将它们及其共享依赖安装到 `<mod>/metahook/` 下。
+- 添加 `-redirect_fatalerror_to_log`，可将致命错误弹窗的标题和消息追加到启动器
+  目录下的 `fatalerror-<datetime>-<pid>.log`，并静默关闭弹窗。支持引擎的 Win32/SDL2
+  错误弹窗；警告和确认对话框保持原有行为。日志无法写入时也保持静默，引擎仍执行
+  原有致命错误退出流程。
 
 ## 文档
 

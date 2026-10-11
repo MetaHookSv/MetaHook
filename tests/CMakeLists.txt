@@ -37,3 +37,11 @@ target_compile_options(commandline_tests PRIVATE /wd4996)
 target_include_directories(commandline_tests PRIVATE
     "${METAHOOK_ROOT}/include/Interface" "${METAHOOK_ROOT}/include/HLSDK/common")
 add_test(NAME commandline COMMAND commandline_tests)
+
+add_executable(fatalerror_tests fatalerror_tests.cpp
+    "${METAHOOK_ROOT}/src/FatalError.cpp" "${METAHOOK_ROOT}/src/commandline.cpp")
+target_compile_features(fatalerror_tests PRIVATE cxx_std_20)
+target_compile_options(fatalerror_tests PRIVATE /wd4996)
+target_include_directories(fatalerror_tests PRIVATE
+    "${METAHOOK_ROOT}/include/Interface" "${METAHOOK_ROOT}/include/HLSDK/common")
+add_test(NAME fatalerror COMMAND fatalerror_tests)
