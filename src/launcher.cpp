@@ -5,6 +5,7 @@
 #include "LoadBlob.h"
 #include "LoadDllNotification.h"
 #include "sys.h"
+#include "FatalError.h"
 
 #include <IEngineAPI.h>
 
@@ -43,7 +44,7 @@ HINTERFACEMODULE LoadFileSystemModule(void)
 
     if (!hModule)
     {
-        MessageBoxA(NULL, "Could not load filesystem dll.\nFileSystem crashed during construction.", "Fatal Error", MB_ICONERROR);
+        MH_FatalErrorMessageBoxA(NULL, "Could not load filesystem dll.\nFileSystem crashed during construction.", "Fatal Error", MB_ICONERROR);
         return NULL;
     }
 
@@ -222,7 +223,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 
         if (dwStatus && dwStatus != WAIT_ABANDONED)
         {
-            MessageBoxA(NULL, "Could not launch game.\nOnly one instance of this game can be run at a time.", "Error", MB_ICONERROR);
+            MH_FatalErrorMessageBoxA(NULL, "Could not launch game.\nOnly one instance of this game can be run at a time.", "Error", MB_ICONERROR);
             return 1;
         }
     }

@@ -71,6 +71,7 @@ flowchart TD
 - `ICommandLine::GetArgc/GetArgv`: appended virtual slots expose the quote-aware parser's existing argument storage. `metahook.cpp::MH_Sys_InitArgv` uses that view with distinct GoldSrc/SvEngine startup parameter layouts.
 - `src/registry.cpp`: wrapper for `HKCU\Software\Valve\Half-Life\Settings`.
 - `src/sys_launcher.cpp`, `src/sys.h`: executable-path and long-path helpers.
+- `src/FatalError.*`: opt-in `-redirect_fatalerror_to_log` logging beside the launcher. Loader errors use the same sink as engine `MessageBoxA` / SDL2 `SDL_ShowSimpleMessageBox` IAT hooks (PE and blob); engine shutdown remains unchanged, and warnings/confirmation dialogs pass through. Failed log writes stay silent. Hooks are installed before catalog loading and restored by `MH_ExitGame` before engine unload.
 - `src/Z.cpp`: `g_pBlobBuffer` placeholder that materializes the `.blob` section (blob target only).
 - `include/metahook.h`, `include/Interface/IPlugins.h`: host/plugin contracts and plugin interface versions.
 - `scripts/`: `build-MetaHook-x86.bat` with Debug/Release wrappers, `sync-gamedata.py`, `validate-gamedata.py` and `manifests/metahook.json`.

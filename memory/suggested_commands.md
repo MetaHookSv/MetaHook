@@ -61,6 +61,17 @@ Manifest mode checks the pruned output against the launcher's required symbols. 
 
 ## Inspection
 
+The current standalone C++ tests cover module aliases, blob imports, command-line
+parsing and fatal-error redirection. Build and run both configurations:
+
+```bat
+cmake -S tests -B build/tests -G "Visual Studio 17 2022" -A Win32
+cmake --build build/tests --config Debug
+ctest --test-dir build/tests -C Debug --output-on-failure
+cmake --build build/tests --config Release
+ctest --test-dir build/tests -C Release --output-on-failure
+```
+
 ```bat
 git status --short
 git diff

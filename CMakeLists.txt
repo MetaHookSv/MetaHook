@@ -43,6 +43,7 @@ endif()
 
 set(METAHOOK_SOURCES
     src/commandline.cpp
+    src/FatalError.cpp
     src/GameData.cpp
     src/LoadDllNotification.cpp
     src/launcher.cpp

@@ -19,6 +19,7 @@
 #include "LoadBlob.h"
 #include "LoadDllNotification.h"
 #include "GameData.h"
+#include "FatalError.h"
 
 extern PVOID g_BlobLoaderSectionBase;
 extern ULONG g_BlobLoaderSectionSize;
@@ -254,6 +255,13 @@ extern "C"
         va_end(argptr);
 
         msg[MAX_SYS_ERROR_LENGTH - 1] = 0;
+
+        // Early loader failures have no engine Sys_Error to perform shutdown.
+        if (!g_pfnSys_Error && MH_RedirectFatalError("Fatal Error", msg))
+        {
+            NtTerminateProcess((HANDLE)(-1), 0);
+            return;
+        }
 
 #if 1
         if (gMetaSave.pEngineFuncs)
@@ -1791,6 +1799,24 @@ void MH_LoadEngine(HMODULE hEngineModule, BlobHandle_t hBlobEngine, const char* 
         g_iEngineType = ENGINE_GOLDSRC_BLOB;
     }
 
+    if (CommandLine()->CheckParm("-redirect_fatalerror_to_log"))
+    {
+        g_pfnFatalErrorMessageBoxA   = MessageBoxA;
+        g_pfnFatalErrorSDLMessageBox = nullptr;
+        // Engines differ in which dialog API they import. Missing imports are
+        // optional; ordinary hook ownership restores the IAT before unloading.
+        if (hEngineModule)
+        {
+            MH_IATHook(hEngineModule, "USER32.dll", "MessageBoxA", MH_FatalErrorMessageBoxA, (void**)&g_pfnFatalErrorMessageBoxA);
+            MH_IATHook(hEngineModule, "SDL2.dll", "SDL_ShowSimpleMessageBox", MH_FatalErrorSDLMessageBox, (void**)&g_pfnFatalErrorSDLMessageBox);
+        }
+        else
+        {
+            MH_BlobIATHook(hBlobEngine, "USER32.dll", "MessageBoxA", MH_FatalErrorMessageBoxA, (void**)&g_pfnFatalErrorMessageBoxA);
+            MH_BlobIATHook(hBlobEngine, "SDL2.dll", "SDL_ShowSimpleMessageBox", MH_FatalErrorSDLMessageBox, (void**)&g_pfnFatalErrorSDLMessageBox);
+        }
+    }
+
     // Establish a fresh gamedata catalog and this engine generation's module identities.
     {
         std::string gamedataRoot = szFullGamePath;
@@ -2598,10 +2624,16 @@ hook_t* MH_IATHook(HMODULE hModule, const char* pszModuleName, const char* pszFu
     if (!pNtHeader)
         return NULL;
 
+    if (!pNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress)
+        return NULL;
+
     auto pImport = (IMAGE_IMPORT_DESCRIPTOR*)((ULONG_PTR)hModule + pNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
 
     while (pImport->Name && 0 != stricmp((const char*)((ULONG_PTR)hModule + pImport->Name), pszModuleName))
         pImport++;
+
+    if (!pImport->Name)
+        return NULL;
 
     auto hProcModule = GetModuleHandleA(pszModuleName);
 
