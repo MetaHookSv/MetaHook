@@ -1,4 +1,5 @@
 #include "filesystem.h"
+#include "utf8filesystem.h"
 #include <windows.h>
 #include <malloc.h>
 
@@ -6,7 +7,7 @@ extern IFileSystem *g_pFullFileSystem;
 
 bool IFileSystem::FileExists(const char *pFileName, const char *pPathID)
 {
-	return (GetFileAttributesA(pFileName) != INVALID_FILE_ATTRIBUTES);
+	return (filesystem_utf8::GetAttributes(pFileName) != INVALID_FILE_ATTRIBUTES);
 }
 
 bool IFileSystem::IsFileWritable(char const *pFileName, const char *pPathID)
@@ -52,7 +53,7 @@ const char *IFileSystem::RelativePathToFullPath(const char *pFileName, const cha
 
 bool IFileSystem::IsDirectory(const char *pFileName, const char *pathID)
 {
-	DWORD dwAttributes = GetFileAttributesA(pFileName);
+	DWORD dwAttributes = filesystem_utf8::GetAttributes(pFileName);
 	return ((dwAttributes != -1) && (dwAttributes & FILE_ATTRIBUTE_DIRECTORY));
 }
 
