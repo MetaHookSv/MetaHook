@@ -19,6 +19,7 @@ This file provides guidance and important rules working with code in this reposi
 - Engine-private symbol inventory: `PrivateSymbols`
 - Build commands, conventions, and verification: `suggested_commands`, `CodeStyles`, `task_completion`
 - Build internals, dependency pinning, migration verification: `build_and_verification`
+- C/C++ formatting toolchain, commands and check scope: `CppFormatting`
 
 ### When notes are insufficient: source entry points (query and read on demand)
 
