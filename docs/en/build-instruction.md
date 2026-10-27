@@ -17,7 +17,7 @@ scripts\build-MetaHook-x86-Release.bat
 
 ## SDL runtime
 
-`METAHOOK_BUILD_SDL` defaults to `ON`. SDL3 and sdl2-compat are built from the original fixed fork commits with shared DLLs, static CRT and the parent's VC-LTL settings. The original SDL feature selection is preserved; the launcher does not acquire a new SDL link dependency. Direct CMake users can set `-DMETAHOOK_BUILD_SDL=OFF` for a launcher-only build.
+`METAHOOK_BUILD_SDL` defaults to `ON`. SDL3 (`thirdparty/SDL3`, hzqst/SDL `main`) and sdl2-compat (`thirdparty/sdl2-compat`, hzqst/sdl2-compat `VGUI2`) are built from their fixed submodule commits with shared DLLs and the parent's static CRT. The original SDL feature selection is preserved; the launcher does not acquire a new SDL link dependency. Direct CMake users can set `-DMETAHOOK_BUILD_SDL=OFF` for a launcher-only build.
 
 Other plugins can consume these headers without building SDL again, for example:
 

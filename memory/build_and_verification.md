@@ -15,18 +15,11 @@ entry point live in the root `README.md`; runnable commands are in
 
 - `CMakeLists.txt` defines the launcher plus static Detours, Capstone,
   RapidJSON, Chocobo1Hash, Musa.Veil and MemoryModulePP targets;
-  `cmake/Dependencies.cmake` initializes missing submodules and prepares
-  VC-LTL.
-- Debug uses `/MTd`, Release uses `/MT`; both keep VC-LTL's existing msvcrt
-  mode.
+  `cmake/Dependencies.cmake` initializes missing submodules.
+- Debug uses `/MTd`, Release uses `/MT` (plain static MSVC CRT).
 - Targets retain the original Windows subsystem, image base `0x1400000`, the
   per-monitor DPI manifest, icon/version resources and configuration-specific
   optimization/link settings. Only x86 Debug and Release are supported.
-- `METAHOOK_DEPENDENCY_CACHE_DIR` selects a non-default dependency cache on
-  first configuration; `VC_LTL_Root` selects an already extracted VC-LTL
-  package. Downloads and extraction are cached under `thirdparty/cache`
-  (Git-ignored), guarded by a lock during preparation, and a validated package
-  is reused on later configurations.
 - Gamedata: `METAHOOK_SYNC_GAMEDATA` (default `ON`) runs
   `scripts/sync-gamedata.py` with the launcher manifest
   `scripts/manifests/metahook.json`. The synchronizer prunes each declared game
@@ -55,9 +48,9 @@ entry point live in the root `README.md`; runnable commands are in
   `d3c042a` was local only at migration time and was published to the configured
   remote's `main` branch on 2026-10-02. A fresh shallow clone verified the exact
   pinned commit. No fallback to an unrelated upstream version is performed.
-- VC-LTL is not a submodule. CMake downloads `VC-LTL-Binary.7z` from the
-  official Chuyu-Team/VC-LTL5 `v5.3.1` release and verifies SHA-256
-  `7a18799ed3aa84a225610a5447a56bc534c5c98ccb8dec05caba0e3f633431ad`.
+- SDL3 is `thirdparty/SDL3` (hzqst/SDL, branch `main`) and sdl2-compat is
+  `thirdparty/sdl2-compat` (hzqst/sdl2-compat, branch `VGUI2`). See
+  "VC-LTL removal" below for the current pins.
 
 ## Migration verification (historical)
 
@@ -94,6 +87,13 @@ disabled, as in the original launcher project. Neither prevented a build.
 - Verification: both normal build entrypoints configured, compiled, synchronized gamedata and installed with exit 0. Both configs installed SDL2.dll/SDL3.dll, include/SDL2 and include/SDL3 (including generated SDL_revision.h), import libraries and licenses. Generated SDL targets use MTd/MT and the expected VC-LTL paths. PE inspection confirms x86; SDL3 imports msvcrt.dll, while sdl2-compat retains its original CRT-free linkage. An x86 smoke program linked to the installed SDL2 import library successfully calls SDL_Init(0), SDL_GetVersion (2.32.57), and SDL_Quit with each installed DLL pair.
 - Consumer verification: Renderer builds from the installed SDK in both configs; compiler dependency logs confirm installed SDL2 header paths and both configurations pass 4/4 CTest. Debug also verifies SDL3_INCLUDE_DIRS is optional. Missing SDL2 paths and invalid SDL3 paths fail configuration with exit 1. Renderer contains no SDL submodule or SDL build target.
 - Launcher-only configuration with `METAHOOK_BUILD_SDL=OFF` succeeds. This smoke test does not validate window creation, audio/video devices, game startup or gameplay. Logs and temporary smoke artifacts are under ignored build/verification/.
+
+## VC-LTL removal (2026-10-27)
+
+- Trigger: the user asked to remove VC-LTL from MetaHookSv and every component, and to move SDL off the `VC-LTL*` fork branches.
+- Change: `cmake/Dependencies.cmake` no longer downloads VC-LTL; `CMakeLists.txt` no longer includes its helper or forces `USE_VCLTL`. All targets use the plain static CRT (`/MTd`, `/MT`). This supersedes the VC-LTL statements in the historical sections above.
+- SDL: `thirdparty/SDL3_fork` was renamed to `thirdparty/SDL3` (hzqst/SDL `main`, pinned at upstream `c7b85f68820195b714cfcde1f2509456a833611a`). `thirdparty/sdl2-compat-fork` was renamed to `thirdparty/sdl2-compat` (hzqst/sdl2-compat `VGUI2` = upstream `d8198c2` + `we need this.` (keep `SDL_EVENT_TEXT_EDITING_CANDIDATES`) + the integer wheel ticks fix).
+- Capstone moved from the fork's VC-LTL branch to its `master` (`9e27c51c2485dd37dd3917919ae781c6153f3688`); the only difference was the VC-LTL helper.
 
 ## Dependency include cleanup (2026-10-02)
 

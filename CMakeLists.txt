@@ -17,10 +17,7 @@ option(METAHOOK_BUILD_SDL "Build and install the SDL2/SDL3 runtime DLLs" ON)
 
 include(cmake/Dependencies.cmake)
 metahook_prepare_dependencies()
-include("${VC_LTL_Root}/VC-LTL helper for cmake.cmake")
 
-# The parent already applies VC-LTL to all dependency targets.
-set(USE_VCLTL OFF CACHE BOOL "Separate vendor VC-LTL integration" FORCE)
 set(CAPSTONE_ARCHITECTURE_DEFAULT OFF CACHE BOOL "" FORCE)
 set(CAPSTONE_X86_SUPPORT ON CACHE BOOL "" FORCE)
 set(CAPSTONE_BUILD_STATIC ON CACHE BOOL "" FORCE)

@@ -1,4 +1,4 @@
-# Keep the original MetaHookSv SDL feature selection and static CRT/VC-LTL settings.
+# Keep the original MetaHookSv SDL feature selection and static CRT settings.
 # SDL is built for its runtime DLLs only: the vendor SDK installation rules
 # (headers, import libraries, CMake package configs, pkg-config files,
 # sdl2-config and license notices) stay disabled, and the two runtime DLLs are
@@ -11,12 +11,12 @@ foreach(option STATIC TEST_LIBRARY TESTS INSTALL_TESTS RENDER GPU JOYSTICK HAPTI
 endforeach()
 
 # sdl2-compat consumes the SDL3::Headers target from this same build tree.
-add_subdirectory(thirdparty/SDL3_fork)
+add_subdirectory(thirdparty/SDL3)
 set(SDL2COMPAT_INSTALL OFF CACHE BOOL "" FORCE)
 foreach(option TESTS STATIC INSTALL_CPACK INSTALL_SDL3)
     set(SDL2COMPAT_${option} OFF CACHE BOOL "" FORCE)
 endforeach()
-add_subdirectory(thirdparty/sdl2-compat-fork)
+add_subdirectory(thirdparty/sdl2-compat)
 
 # Group the SDL libraries under one IDE filter.
 foreach(sdl_target SDL_uclibc SDL2 SDL2_test SDL2main SDL3-shared)

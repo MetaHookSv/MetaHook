@@ -17,7 +17,7 @@ scripts\build-MetaHook-x86-Release.bat
 
 ## SDL 运行时
 
-`METAHOOK_BUILD_SDL` 默认为 `ON`。SDL3 与 sdl2-compat 使用共享 DLL、静态 CRT 和父项目的 VC-LTL 设置，从原有的固定 fork 提交构建。原始 SDL 特性选择保持不变；启动器未引入新的 SDL 链接依赖。直接使用 CMake 的用户可设置 `-DMETAHOOK_BUILD_SDL=OFF` 进行仅启动器的构建。
+`METAHOOK_BUILD_SDL` 默认为 `ON`。SDL3（`thirdparty/SDL3`，hzqst/SDL `main`）与 sdl2-compat（`thirdparty/sdl2-compat`，hzqst/sdl2-compat `VGUI2`）使用共享 DLL 和父项目的静态 CRT，从固定的子模块提交构建。原始 SDL 特性选择保持不变；启动器未引入新的 SDL 链接依赖。直接使用 CMake 的用户可设置 `-DMETAHOOK_BUILD_SDL=OFF` 进行仅启动器的构建。
 
 其他插件无需重新构建 SDL 即可消费这些头文件，例如：
 

@@ -17,7 +17,7 @@ scripts\build-MetaHook-x86-Debug.bat
 scripts\build-MetaHook-x86-Release.bat
 ```
 
-Each script configures, builds and installs its configuration; failures return nonzero. Existing `SolutionDir` overrides the root, otherwise it is derived from the script location. Dependency preparation is inside CMake, including the fixed VC-LTL download/hash check.
+Each script configures, builds and installs its configuration; failures return nonzero. Existing `SolutionDir` overrides the root, otherwise it is derived from the script location. Dependency preparation (submodule initialization) is inside CMake.
 
 ## Direct CMake usage
 

@@ -3,7 +3,6 @@
 /Release/
 /Debug/
 /x64/
-/thirdparty/cache/
 /.vs/
 *.user
 __pycache__/

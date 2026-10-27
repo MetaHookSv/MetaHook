@@ -26,7 +26,7 @@ This file provides guidance and important rules working with code in this reposi
 - Build: `CMakeLists.txt`, `cmake/Dependencies.cmake`, `scripts/build-MetaHook-x86-Debug.bat`, `scripts/build-MetaHook-x86-Release.bat`
 - Loader and core logic: `src/`
 - Public API / interfaces: `include/metahook.h`, `include/Interface/`
-- Dependencies: `thirdparty/`; source dependencies are fixed submodules, while VC-LTL is a verified binary download prepared by CMake.
+- Dependencies: `thirdparty/`; source dependencies are fixed submodules; every target uses the static MSVC CRT.
 - SDL runtime/SDK packaging: `cmake/SDL.cmake`, enabled by `METAHOOK_BUILD_SDL` (default ON). MetaHook builds and installs SDL3 plus sdl2-compat; external plugins consume the installed headers rather than rebuilding SDL.
 - Plugins and PluginLibs are external consumers, not directories built by this checkout.
 - Runtime plugin configuration: `<game>/<mod>/metahook/configs/plugins.lst` (not a file shipped in this repository).

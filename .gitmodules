@@ -16,9 +16,11 @@
 [submodule "thirdparty/MemoryModulePP"]
 	path = thirdparty/MemoryModulePP
 	url = https://github.com/MetaHookSv/MemoryModulePP
-[submodule "thirdparty/SDL3_fork"]
-	path = thirdparty/SDL3_fork
+[submodule "thirdparty/sdl2-compat"]
+	path = thirdparty/sdl2-compat
+	url = https://github.com/hzqst/sdl2-compat
+	branch = VGUI2
+[submodule "thirdparty/SDL3"]
+	path = thirdparty/SDL3
 	url = https://github.com/hzqst/SDL
-[submodule "thirdparty/sdl2-compat-fork"]
-	path = thirdparty/sdl2-compat-fork
-	url = https://github.com/hzqst/sdl2-compat-fork
+	branch = main
