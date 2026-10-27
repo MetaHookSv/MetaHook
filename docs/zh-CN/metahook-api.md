@@ -234,23 +234,15 @@ g_pMetaHookAPI->DeleteThreadPool(hPool);
 g_pMetaHookAPI->DeleteWorkItem(hWorkItem);
 ```
 
-## 自动检测并加载 SSE / SSE2 / AVX / AVX2 版本的插件
+## 插件文件名解析与指令集版本回退
 
 1. MetaHook启动器总是会以从上到下的顺序加载 `\(ModDirectory)\metahook\configs\plugins.lst` 中列出的插件。当插件名前面存在引号";"时该行会被忽略。
 
-2. 当以调试模式启动时自动加载(PluginName).dll
+2. 当(PluginName).dll存在时只加载(PluginName).dll，加载失败时弹窗提示，不会再尝试其他文件名。
 
-3. 当(2)的文件名不存在，且当支持AVX2指令集时自动加载(PluginName)_AVX2.dll
+3. 仅当(PluginName).dll不存在时，才按顺序回退尝试(PluginName)_AVX2.dll、(PluginName)_AVX.dll、(PluginName)_SSE2.dll、(PluginName)_SSE.dll，每一项仅在CPU支持对应指令集时尝试。该回退仅用于兼容只发布了指令集版本的旧插件，官方插件不再发布这些版本。
 
-4. 当(2) (3)的文件名不存在，且当支持AVX指令集时且(2)失败时自动加载(PluginName)_AVX.dll
-
-5. 当(2) (3) (4)的文件名不存在，当支持SSE2指令集时且(3)失败时自动加载(PluginName)_SSE2.dll
-
-6. 当(2) (3) (4) (5)的文件名不存在，当支持SSE指令集时且(4)失败时自动加载(PluginName)_SSE.dll
-
-7. 当(3) (4) (5) (6)的文件名均不存在时自动加载(PluginName).dll
-
-8. 如果上述步骤全部失败，则弹窗提示该插件加载失败。
+4. 如果上述步骤全部失败，则弹窗提示该插件加载失败。
 
 ## 非法虚表hook检查
 

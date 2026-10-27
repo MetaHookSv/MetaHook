@@ -478,7 +478,7 @@ typedef struct metahook_api_s
 		Usage:
 
 		mh_plugininfo_t info;
-		if(g_pMetaHookAPI->GetPluginInfo("PluginName_AVX2.dll", &info)) //"PluginName_AVX2.dll" is case-insensitive
+		if(g_pMetaHookAPI->GetPluginInfo("PluginName.dll", &info)) //"PluginName.dll" is case-insensitive
 		{
 
 		}

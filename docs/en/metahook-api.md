@@ -186,16 +186,12 @@ Destroy the specified work item. Usually called after the work item is completed
 g_pMetaHookAPI->DeleteWorkItem(hWorkItem);
 ```
 
-## Automatic Detection and Loading of SSE / SSE2 / AVX / AVX2 Versions of Plugins
+## Plugin File Name Resolution and Instruction-Set Variant Fallback
 
 1. The MetaHook launcher will always load the plugins listed in `\(ModDirectory)\metahook\configs\plugins.lst` in order from top to bottom. Lines with a semicolon ";" before the plugin name will be ignored.
-2. When started in debug mode, automatically load (PluginName).dll.
-3. If the file name from step (2) does not exist, and if the AVX2 instruction set is supported, automatically load (PluginName)_AVX2.dll.
-4. If the file names from steps (2) and (3) do not exist, and if the AVX instruction set is supported and step (2) fails, automatically load (PluginName)_AVX.dll.
-5. If the file names from steps (2), (3), and (4) do not exist, and if the SSE2 instruction set is supported and step (3) fails, automatically load (PluginName)_SSE2.dll.
-6. If the file names from steps (2), (3), (4), and (5) do not exist, and if the SSE instruction set is supported and step (4) fails, automatically load (PluginName)_SSE.dll.
-7. If the file names from steps (3), (4), (5), and (6) do not exist, automatically load (PluginName).dll.
-8. If all the above steps fail, a popup will indicate that the plugin failed to load.
+2. If (PluginName).dll exists, only (PluginName).dll is loaded; a load failure shows a popup and no other file name is tried.
+3. Only when (PluginName).dll does not exist, (PluginName)_AVX2.dll, (PluginName)_AVX.dll, (PluginName)_SSE2.dll and (PluginName)_SSE.dll are tried in that order, each only when the CPU supports the corresponding instruction set. This fallback only keeps older plugins that ship nothing but an instruction-set variant working; official plugins no longer ship these variants.
+4. If all the above steps fail, a popup will indicate that the plugin failed to load.
 
 ## Illegal Virtual Table Hook Check
 

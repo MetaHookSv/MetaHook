@@ -93,7 +93,7 @@ Runtime assets live in the target game, not in this repository: `<game>/<mod>/me
 ## Known limitations and pitfalls
 
 - Plugin invocation order is the reverse of `plugins.lst`: `MH_LoadPlugin` inserts at the head of a linked list, and `LoadEngine` / `LoadClient` traverse from the head.
-- The `_SSE.dll` branch in `MH_LoadPlugins` tries the same candidate twice.
+- `MH_LoadPlugins` treats the listed `<Name>.dll` as authoritative: when it exists, its load errors are reported and no variant is probed. `_AVX2` / `_AVX` / `_SSE2` / `_SSE` variants are only a legacy fallback when the baseline file is absent (CPU detection goes through the already loaded `SDL2.dll`). Official plugins no longer ship variants; the old variant-first order let stale `*_AVX2.dll` copies shadow freshly installed baselines.
 - `MH_FreeHooksForModule` is an empty stub although the unload-notification path calls it; hooks are not reclaimed when a module unloads.
 - `LoadDllNotification` dispatches callbacks inside the Ldr critical region; plugin callbacks must avoid blocking and reentrancy-sensitive work.
 - `launcher.cpp` keeps helper code outside the main flow (for example, `SetActiveProcess` is never called).

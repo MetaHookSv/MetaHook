@@ -1049,11 +1049,18 @@ void MH_LoadPlugins(const char* szGameName, const char* szGameFullPath)
         }                                                                                                              \
     }
 
-                MH_LOAD_PLUGIN_TEMPLATE(MH_IsDebuggerPresent(), ".dll");
+                // The listed name is authoritative: an instruction-set variant is only a
+                // fallback for a plugin shipped without its baseline DLL, so a stale variant
+                // left by an older release can never shadow a freshly installed baseline.
+                bool bHasBaseline = GetFileAttributesA((aPluginPath + ".dll").c_str()) != INVALID_FILE_ATTRIBUTES;
+
+                MH_LOAD_PLUGIN_TEMPLATE(bHasBaseline, ".dll");
+                if (bHasBaseline)
+                    break;
+
                 MH_LOAD_PLUGIN_TEMPLATE2(MH_HasAVX2(), "_AVX2.dll");
                 MH_LOAD_PLUGIN_TEMPLATE2(MH_HasAVX(), "_AVX.dll");
                 MH_LOAD_PLUGIN_TEMPLATE2(MH_HasSSE2(), "_SSE2.dll");
-                MH_LOAD_PLUGIN_TEMPLATE2(MH_HasSSE(), "_SSE.dll");
                 MH_LOAD_PLUGIN_TEMPLATE2(MH_HasSSE(), "_SSE.dll");
                 MH_LOAD_PLUGIN_TEMPLATE(1, ".dll");
 
