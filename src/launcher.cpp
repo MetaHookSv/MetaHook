@@ -277,6 +277,9 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
     SetEnvironmentVariableA("SDL_HINT_MOUSE_EMULATE_WARP_WITH_RELATIVE", "0");
     SetEnvironmentVariableA("SDL_MOUSE_EMULATE_WARP_WITH_RELATIVE", "0");
 
+    // see https://github.com/MetaHookSv/MetaHookSv/issues/965
+    SetEnvironmentVariableA("SDL_WINDOWS_DPI_AWARENESS", "permonitorv2");
+
     if (registry->ReadInt("CrashInitializingVideoMode", FALSE))
     {
         registry->WriteInt("CrashInitializingVideoMode", FALSE);
