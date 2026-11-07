@@ -11,6 +11,15 @@ record for the standalone launcher. User-facing deployment and a short build
 entry point live in the root `README.md`; runnable commands are in
 [[metahook/suggested-commands]].
 
+## Zombie Panic native IBorder ABI (2026-11-07)
+
+- Trigger: zp build 10210 calls border virtual slot 6 as `GetName()` during client UI initialization.
+- Root cause: the public `IBorder` declared the implementation helper `ParseSideSettings` before `GetName`, shifting the native virtual slots and dispatching a no-argument call to a three-argument method.
+- Fix: remove that helper from the public interface. `Border` retains its private, nonvirtual parser; native slots 0 through 7 keep their original order. Rebuild SDK consumers together rather than patching only their vtables.
+- Verification: the VGUI2Extension native-slot regression failed against the old header and passed after the fix; all 11 plugin CTests and the MetaHook/VGUI2Extension pinned format checks passed. The aggregate Debug/Win32 build passed with Windows SDK 10.0.26100.0.
+- Runtime scope: combined with the missing-image fix, the deployed DLL let the original zp client `Start()` return successfully under CDB without runtime patches. Full halflife-mcp startup remains blocked later by Renderer's missing `GameStudioRenderer_StudioDrawModel` client gamedata symbol; no map or visual regression is claimed.
+- Evidence: aggregate `build/x86/Debug/deployment/zp-fixed-start-verification.log` and the game's `fatalerror-20261107-192620-718-16304.log`. This rule applies to implementations exposed to native GoldSrc `IBorder` callers.
+
 ## CMake internals
 
 - `CMakeLists.txt` defines the launcher plus static Detours, Capstone,
