@@ -52,7 +52,6 @@ public:
     virtual void             SetInset(int left, int top, int right, int bottom)                                  = 0;
     virtual void             GetInset(int& left, int& top, int& right, int& bottom)                              = 0;
     virtual void             ApplySchemeSettings(IScheme* pScheme, KeyValues* inResourceData)                    = 0;
-    virtual void             ParseSideSettings(int side_index, KeyValues* inResourceData, IScheme* pScheme)      = 0;
     virtual const char*      GetName(void)                                                                       = 0;
     virtual void             SetName(const char* name)                                                           = 0;
     virtual backgroundtype_e GetBackgroundType(void)                                                             = 0;
